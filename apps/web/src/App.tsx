@@ -16,7 +16,7 @@ export default function App() {
                 Oportunidades de veículos em leilão, comparadas com a tabela FIPE
               </p>
             </div>
-            <p className="text-xs text-muted-foreground">Fonte: Sodré Santoro</p>
+            <p className="text-xs text-muted-foreground">Fontes: Sodré Santoro · Freitas Leiloeiro</p>
           </div>
         </header>
 
