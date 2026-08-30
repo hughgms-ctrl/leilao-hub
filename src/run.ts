@@ -1,6 +1,7 @@
 import { SodreSantoroApiAdapter } from './adapters/sodre-santoro-api';
 import { FreitasAdapter } from './adapters/freitas';
 import { MegaAdapter } from './adapters/mega';
+import { ZukAdapter } from './adapters/zuk';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -66,10 +67,26 @@ async function coletarMega(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+async function coletarZuk(hasDb: boolean): Promise<number> {
+  const a = new ZukAdapter();
+  console.log(`
+[${a.slug}] paginando /leilao-de-veiculos (HTML) — acervo judicial...`);
+  // comDetalhe=true: a descrição do card vem truncada e sem ano não há FIPE
+  const lotes = await a.fetchAllLots(true);
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'leilao-de-veiculos');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
   'mega-leiloes': coletarMega,
+  'portal-zuk': coletarZuk,
 };
 
 async function main() {

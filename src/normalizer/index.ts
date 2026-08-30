@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/sodre';
 import { mapFreitasDoc } from './mappers/freitas';
 import { mapMegaDoc } from './mappers/mega';
+import { mapZukDoc } from './mappers/zuk';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -21,6 +22,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'sodre-santoro': mapSodreDoc,
   'freitas-leiloeiro': mapFreitasDoc,
   'mega-leiloes': mapMegaDoc,
+  'portal-zuk': mapZukDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -30,6 +32,13 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   if (slug === 'mega-leiloes') {
     return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
+  }
+  if (slug === 'portal-zuk') {
+    // O caminho diz "imoveis" e traz um slug descritivo, mas o roteador
+    // usa só o id — verificado: /v/x/36488 abre o mesmo leilão que
+    // /v/leilao-judicial-sao-paulo-tjsp/36488. Como o slug real não sai
+    // dos dados do lote, mandamos um neutro.
+    return `https://www.portalzuk.com.br/leilao-de-imoveis/v/leilao/${externalId}`;
   }
   return `https://www.sodresantoro.com.br/leilao/${externalId}`;
 }

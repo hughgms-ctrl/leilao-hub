@@ -17,19 +17,15 @@ import * as cheerio from 'cheerio';
  * O caminho diz "imoveis" mesmo para veículos — é o endpoint genérico
  * deles. O `_token` é CSRF e precisa ser lido da página a cada execução.
  *
- * INCOMPLETO — ainda NÃO registrado no runner nem no normalizer.
+ * A descrição do CARD vem truncada com "..." em 36 dos 56 lotes, e em
+ * formatos variados ("Carro, VW/Fusca 1300, ... 1980/1980" convive com
+ * "LOTE 03: VEÍCULO VOLKSWAGEN 25-370 E CONSTEL..."). Sem ano não há
+ * match FIPE e sem FIPE não há score, então a coleta busca a página de
+ * detalhe de cada lote — server-rendered, sem browser. Efeito medido:
+ * truncados 36 → 1, ano 24 → 46/56, marca+modelo+ano 21 → 43/56.
  *
- * O que funciona: pagina os 56 lotes, extrai id, praças (lance mínimo e
- * avaliação), comitente, imagens e origem judicial.
- *
- * O que falta: a descrição do card vem TRUNCADA ("...") e em formatos
- * variados ("Carro, VW/Fusca 1300, cor branca, 1980/1980" convive com
- * "LOTE 03: VEÍCULO VOLKSWAGEN 25-370 E CONSTEL..."), então marca/modelo/
- * ano só saem em ~21 dos 56. Sem ano não há match FIPE, e sem FIPE não há
- * score — ou seja, a maioria dos lotes entraria sem servir para o ranking.
- *
- * Correção conhecida: buscar a página de detalhe de cada lote, como o
- * adapter do Mega faz, onde a descrição vem completa. São +56 requests.
+ * Todo lote traz número de processo judicial (56/56), o que confirma que
+ * o acervo é 100% de Tribunal de Justiça.
  */
 
 const BASE_URL = 'https://www.portalzuk.com.br';
@@ -61,6 +57,8 @@ export interface ZukRawLot {
   praca2Data: string;
   imagem: string;
   paginaUrl: string;
+  /** nº do processo judicial, só vem na página de detalhe */
+  processo?: string;
 }
 
 export class ZukAdapter {
@@ -95,7 +93,7 @@ export class ZukAdapter {
         .get()
         .filter((t) => t.length > 10);
 
-      const ehEndereco = (t: string) => /\s\/\s*[A-Z]{2}/.test(t);
+      const ehEndereco = (t: string) => /\s\/\s*[A-Z]{2}/.test(t);
       const endereco = spans.find(ehEndereco) ?? '';
       const descricao =
         spans.filter((t) => t !== endereco).sort((a, b) => b.length - a.length)[0] ?? '';
@@ -137,7 +135,54 @@ export class ZukAdapter {
     return out;
   }
 
-  async fetchAllLots(): Promise<ZukRawLot[]> {
+  /**
+   * Detalhe do lote. A descrição do CARD vem truncada com "..." (36 dos 56
+   * lotes), e sem ano não há match FIPE — então sem isto a maior parte do
+   * acervo entra sem servir para o ranking.
+   *
+   * A página é server-rendered: o texto completo está em
+   * <p class="property-hide-show">, e o <span id="descricao-detalhes">
+   * aninhado guarda o excedente que o "ver mais" revelaria. Não precisa
+   * de browser.
+   */
+  parseDetalhe(html: string): { descricao: string; processo?: string } {
+    const $ = cheerio.load(html);
+    $('script, style, svg').remove();
+
+    const p = $('.property-info-text .property-hide-show').first();
+    const descricao = p.text().replace(/\s+/g, ' ').trim();
+
+    // "Processo: 1127919-19.2018.8.26.0100 Acessar processo"
+    const itens = $('.property-description-items').first().text();
+    const processo = itens.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/)?.[0];
+
+    return { descricao, processo };
+  }
+
+  /** Enriquece cada lote com a descrição completa. Sequencial, com DELAY_MS. */
+  async fetchDetalhes(lotes: ZukRawLot[]): Promise<ZukRawLot[]> {
+    let ok = 0;
+    for (const l of lotes) {
+      await sleep(DELAY_MS);
+      try {
+        const r = await fetch(l.paginaUrl, { headers: HEADERS });
+        if (!r.ok) continue;
+        const d = this.parseDetalhe(await r.text());
+        // só troca se o detalhe trouxer MAIS texto — nunca regride
+        if (d.descricao && d.descricao.length > l.descricao.replace(/\.\.\.$/, '').length) {
+          l.descricao = d.descricao;
+          ok++;
+        }
+        if (d.processo) l.processo = d.processo;
+      } catch {
+        // um detalhe que falha não derruba a coleta
+      }
+    }
+    console.log(`[${this.slug}] detalhe: ${ok}/${lotes.length} descrições completadas`);
+    return lotes;
+  }
+
+  async fetchAllLots(comDetalhe = true): Promise<ZukRawLot[]> {
     const res = await fetch(LISTAGEM, { headers: HEADERS });
     if (!res.ok) throw new Error(`listagem: HTTP ${res.status}`);
     const html = await res.text();
@@ -188,6 +233,7 @@ export class ZukAdapter {
       }
       console.log(`[${this.slug}] +${novos.length} lotes (total ${todos.length})`);
     }
-    return todos;
+
+    return comDetalhe ? this.fetchDetalhes(todos) : todos;
   }
 }

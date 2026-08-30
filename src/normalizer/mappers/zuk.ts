@@ -22,6 +22,10 @@ function tipoDe(primeiroCampo: string): string {
   const t = (primeiroCampo || '').toLowerCase();
   if (/moto/.test(t)) return 'motos';
   if (/caminh|[oô]nibus|trator/.test(t)) return 'caminhões';
+  // Semirreboque/carreta não é automóvel e a FIPE não cobre. Sem esta
+  // linha eles caíam no fallback 'carros' e o matcher tentaria casá-los
+  // com um carro de nome parecido — preço errado alimentando o ranking.
+  if (/semi[- ]?reboque|reboque|carreta|carroceria/.test(t)) return 'implementos rod.';
   return 'carros';
 }
 
@@ -43,23 +47,45 @@ export function parseDescricao(desc: string): {
   const t = (desc || '').trim();
   const tipo = tipoDe(t);
 
-  // ano: "1980/1980" primeiro; senão "ANO 2013" / "ano de fabricação 2013"
+  // ano, em três formatos que convivem na mesma listagem:
+  //   "1980/1980"                    → fabricação/modelo
+  //   "ANO 2013" / "ano de fab. 2013"
+  //   "Monza Hatch, 1982, placa ..." → ano sozinho entre vírgulas
+  // O terceiro exige que os 4 dígitos sejam o campo INTEIRO entre vírgulas;
+  // sem isso "Fusca 1300" viraria ano. A faixa plausível de anoOk é a
+  // segunda barreira.
   const parAnos = t.match(/(\d{4})\s*\/\s*(\d{4})/);
-  const anoSolto = t.match(/ano(?:\s+de\s+fabrica[çc][ãa]o)?\s*:?\s*(\d{4})/i);
-  const anoFab = parAnos ? Number(parAnos[1]) : anoSolto ? Number(anoSolto[1]) : undefined;
+  const anoRotulado = t.match(/ano(?:\s+de\s+fabrica[çc][ãa]o)?\s*:?\s*(\d{4})/i);
+  const anoIsolado = t.match(/(?:^|,)\s*(\d{4})\s*(?=,|\.|$)/);
+  const anoFab = parAnos
+    ? Number(parAnos[1])
+    : anoRotulado
+      ? Number(anoRotulado[1])
+      : anoIsolado
+        ? Number(anoIsolado[1])
+        : undefined;
   const anoModelo = parAnos ? Number(parAnos[2]) : anoFab;
 
   // marca/modelo: o padrão "MARCA/MODELO" aparece em todos os formatos.
   // Recorta até a próxima vírgula, que é onde o modelo termina.
-  const mm = t.match(/([A-Za-zÀ-ÿ]{2,})\s*\/\s*([^,.;]{2,60})/);
+  //
+  // O ponto NÃO pode entrar no corte: excluí-lo truncava a motorização
+  // ("UNO VIVACE 1.0" virava "UNO VIVACE 1"), e é justamente esse token
+  // que o matcher da FIPE usa. Então cortamos só por vírgula/ponto-e-
+  // vírgula e depois limpamos o ponto que não for decimal (o final de
+  // frase em "placas BUT-9876.").
+  const limpar = (v?: string) =>
+    v?.replace(/\.(?!\d)/g, ' ').replace(/\s+/g, ' ').trim() || undefined;
+
+  const mm = t.match(/([A-Za-zÀ-ÿ]{2,})\s*\/\s*([^,;]{2,60})/);
   let marca = mm?.[1];
-  let modelo = mm?.[2]?.trim();
+  let modelo = limpar(mm?.[2]);
 
   // sem barra: tenta o que vem depois de "VEÍCULO" (formato B)
   if (!marca) {
-    const apos = t.match(/ve[íi]culo\s+([A-Za-zÀ-ÿ]{2,})\s+([^,.;]{2,60})/i);
+    const apos = t.match(/ve[íi]culo\s+([A-Za-zÀ-ÿ]{2,})\s+([^,;]{2,60})/i);
     marca = apos?.[1];
-    modelo = apos?.[2]?.trim();
+    modelo = limpar(apos?.[2]);
   }
 
   const cor = t.match(/cor\s+([A-Za-zÀ-ÿ]+)/i)?.[1];
@@ -87,7 +113,8 @@ export function mapZukDoc(d: Record<string, any>): DbLot | null {
 
   const v1 = precoBR(d.praca1Valor);
   const v2 = precoBR(d.praca2Valor);
-  // enquanto a 1ª praça não passou, é ela que vale; senão, a 2ª
+  // Mesma regra do Mega: quando há 2ª praça publicada é ela o lance
+  // mínimo relevante (é onde entra o deságio); a 1ª fica como avaliação.
   const lanceMinimo = v2 ?? v1;
 
   return {
