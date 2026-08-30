@@ -77,15 +77,55 @@ export function parseDescricao(desc: string): {
   const limpar = (v?: string) =>
     v?.replace(/\.(?!\d)/g, ' ').replace(/\s+/g, ' ').trim() || undefined;
 
-  const mm = t.match(/([A-Za-zÀ-ÿ]{2,})\s*\/\s*([^,;]{2,60})/);
-  let marca = mm?.[1];
-  let modelo = limpar(mm?.[2]);
+  let marca: string | undefined;
+  let modelo: string | undefined;
 
-  // sem barra: tenta o que vem depois de "VEÍCULO" (formato B)
-  if (!marca) {
+  // Formato A ("Carro, MARCA/MODELO, cor ..."): o veículo é o campo
+  // seguinte ao tipo. Ler POSIÇÃO aqui é mais seguro do que caçar a
+  // primeira barra do texto — havia descrições com "ano/modelo
+  // 2013/2013", e a barra dessa expressão virava marca "ano" e modelo
+  // "modelo 2013/2013" em 12 dos 36 lotes elegíveis.
+  const campos = t.split(',').map((x) => x.trim());
+  if (campos.length > 1 && /^(carro|motocicleta|moto|caminh|ve[íi]culo)/i.test(campos[0])) {
+    const veic = campos[1];
+    const barra = veic.indexOf('/');
+    if (barra > 0) {
+      marca = veic.slice(0, barra).trim().split(/\s+/).pop();
+      modelo = limpar(veic.slice(barra + 1));
+      // "Fiat Palio ELX/FLEX 1.4": a marca é a 1ª palavra, e o que vem
+      // antes da barra faz parte do modelo.
+      const antes = veic.slice(0, barra).trim().split(/\s+/);
+      if (antes.length > 1) {
+        marca = antes[0];
+        modelo = limpar(`${antes.slice(1).join(' ')}/${veic.slice(barra + 1)}`);
+      }
+    } else {
+      const palavras = veic.split(/\s+/);
+      marca = palavras[0];
+      modelo = limpar(palavras.slice(1).join(' '));
+    }
+  }
+
+  // Formato B ("LOTE 3: VEÍCULO VW GOL 1.0 GIV, PLACA ..."):
+  // o que vem depois de "VEÍCULO".
+  if (!marca || !modelo) {
     const apos = t.match(/ve[íi]culo\s+([A-Za-zÀ-ÿ]{2,})\s+([^,;]{2,60})/i);
-    marca = apos?.[1];
-    modelo = limpar(apos?.[2]);
+    if (apos) {
+      marca = apos[1];
+      modelo = limpar(apos[2]);
+    }
+  }
+
+  // Último recurso: primeira barra do texto, ignorando rótulos que não
+  // são marca ("ano/modelo", "marca/modelo").
+  if (!marca || !modelo) {
+    const ROTULO = /^(ano|anos|modelo|marca|tipo|cor|km|placa|chassi|fab)$/i;
+    for (const m of t.matchAll(/([A-Za-zÀ-ÿ]{2,})\s*\/\s*([^,;]{2,60})/g)) {
+      if (ROTULO.test(m[1])) continue;
+      marca = m[1];
+      modelo = limpar(m[2]);
+      break;
+    }
   }
 
   const cor = t.match(/cor\s+([A-Za-zÀ-ÿ]+)/i)?.[1];
