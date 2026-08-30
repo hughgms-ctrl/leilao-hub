@@ -25,8 +25,30 @@ export function sslPara(url: string | undefined): PoolConfig['ssl'] {
   return ehSupabase || pedeSsl ? { rejectUnauthorized: false } : undefined;
 }
 
+/**
+ * Tira o `sslmode` da URL.
+ *
+ * A partir do pg 8.16 o `sslmode=require` da connection string é tratado
+ * como `verify-full` e SOBRESCREVE o objeto `ssl` — o rejectUnauthorized
+ * acima seria ignorado e a conexão morreria com SELF_SIGNED_CERT_IN_CHAIN
+ * contra a CA da Supabase. Sem o parâmetro, quem manda é o objeto `ssl`.
+ */
+export function semSslMode(url: string | undefined): string | undefined {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('sslmode');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 /** PoolConfig pronto para scraper/normalizer. */
 export function poolConfigDireto(): PoolConfig {
   const connectionString = connectionStringDireta();
-  return { connectionString, ssl: sslPara(connectionString) };
+  return {
+    connectionString: semSslMode(connectionString),
+    ssl: sslPara(connectionString),
+  };
 }

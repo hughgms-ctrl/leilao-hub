@@ -21,8 +21,27 @@ function sslPara(url: string): PoolConfig['ssl'] {
   return ehSupabase || pedeSsl ? { rejectUnauthorized: false } : undefined;
 }
 
+/**
+ * Tira o `sslmode` da URL.
+ *
+ * A partir do pg 8.16 o `sslmode=require` da connection string é tratado
+ * como `verify-full` e SOBRESCREVE o objeto `ssl` — ou seja, o
+ * rejectUnauthorized:false acima era ignorado e a conexão morria com
+ * SELF_SIGNED_CERT_IN_CHAIN contra a CA da Supabase. Removendo o
+ * parâmetro, quem manda no TLS é o objeto `ssl`.
+ */
+function semSslMode(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('sslmode');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export const pool = new Pool({
-  connectionString,
+  connectionString: semSslMode(connectionString),
   ssl: sslPara(connectionString),
   // serverless: poucas conexões por instância, liberadas rápido
   max: Number(process.env.PG_POOL_MAX ?? 5),

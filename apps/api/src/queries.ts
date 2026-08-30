@@ -1,5 +1,5 @@
-import { pool, LANCE_REF_SQL } from './db';
-import type { ListaLotesQuery } from './schemas';
+import { pool, LANCE_REF_SQL } from './db.js';
+import type { ListaLotesQuery } from './schemas.js';
 
 export interface OpcoesLista {
   /** exige score_oportunidade não nulo (usado por /api/oportunidades) */

@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import { z } from 'zod';
-import { listaLotesSchema, idSchema } from './schemas';
-import { listarLotes, buscarLote, estatisticas } from './queries';
-import { pool } from './db';
+import { listaLotesSchema, idSchema } from './schemas.js';
+import { listarLotes, buscarLote, estatisticas } from './queries.js';
+import { pool } from './db.js';
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
