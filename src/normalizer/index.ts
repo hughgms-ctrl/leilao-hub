@@ -108,7 +108,13 @@ async function upsertLeilao(
   // ele alimenta o leilão — inclusive a detecção do art. 895.
   const condicoes: string | undefined = doc.condicoes ? String(doc.condicoes) : undefined;
   const parc = detectarParcelamento(condicoes);
-  const ehJudicial = /judicial/i.test(String(doc.tipoLeilao ?? '')) || undefined;
+  // O Mega diz o tipo do leilão em texto. O Zuk não diz, mas publica o
+  // nº do processo em 100% dos lotes — e processo só existe em leilão
+  // judicial, então a presença dele é prova, não palpite.
+  const ehJudicial =
+    /judicial/i.test(String(doc.tipoLeilao ?? '')) ||
+    Boolean(doc.processo) ||
+    undefined;
 
   const r = await pool.query(
     `INSERT INTO leiloes (
