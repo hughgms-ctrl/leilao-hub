@@ -35,6 +35,8 @@ export interface DbLot {
   descricao?: string;
   lanceInicial?: number;
   lanceAtual?: number;    // só quando bid_has_bid
+  /** avaliação do bem publicada pelo leiloeiro/juízo, quando houver */
+  valorMercado?: number;
   imagens: string[];
   cidade?: string;
   uf?: string;

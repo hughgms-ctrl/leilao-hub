@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/sodre';
 import { mapFreitasDoc } from './mappers/freitas';
+import { mapMegaDoc } from './mappers/mega';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -19,12 +20,16 @@ import { poolConfigDireto } from '../pg-config';
 const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'sodre-santoro': mapSodreDoc,
   'freitas-leiloeiro': mapFreitasDoc,
+  'mega-leiloes': mapMegaDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
 function leilaoUrl(slug: string, externalId: string): string {
   if (slug === 'freitas-leiloeiro') {
     return `https://www.freitasleiloeiro.com.br/Leiloes/Lotes?leilaoId=${externalId}`;
+  }
+  if (slug === 'mega-leiloes') {
+    return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
   }
   return `https://www.sodresantoro.com.br/leilao/${externalId}`;
 }
@@ -88,17 +93,34 @@ async function upsertLeilao(
   // Sodré traz os campos do leilão no próprio documento do lote; Freitas
   // só publica data e hora no card. Lemos os dois vocabulários.
   const dataInicio = doc.auction_date_init || dataBrParaIso(doc.dataLeilao, doc.horaLeilao);
+
+  // O Mega publica as condições de venda na PÁGINA DO LOTE, não num
+  // endpoint de leilão. Quando o documento do lote trouxer esse texto,
+  // ele alimenta o leilão — inclusive a detecção do art. 895.
+  const condicoes: string | undefined = doc.condicoes ? String(doc.condicoes) : undefined;
+  const parc = detectarParcelamento(condicoes);
+  const ehJudicial = /judicial/i.test(String(doc.tipoLeilao ?? '')) || undefined;
+
   const r = await pool.query(
     `INSERT INTO leiloes (
        leiloeiro_id, external_id, titulo, pagina_url,
-       data_inicio, data_fim, status, comitente
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7::status_leilao,$8)
+       data_inicio, data_fim, status, comitente,
+       condicoes_venda, is_judicial,
+       permite_parcelamento, parcelamento_entrada_pct,
+       parcelamento_parcelas_max, parcelamento_trecho
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7::status_leilao,$8,$9,$10,$11,$12,$13,$14)
      ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
        titulo      = COALESCE(EXCLUDED.titulo, leiloes.titulo),
        data_inicio = COALESCE(EXCLUDED.data_inicio, leiloes.data_inicio),
        data_fim    = COALESCE(EXCLUDED.data_fim, leiloes.data_fim),
        status      = EXCLUDED.status,
        comitente   = COALESCE(EXCLUDED.comitente, leiloes.comitente),
+       condicoes_venda = COALESCE(EXCLUDED.condicoes_venda, leiloes.condicoes_venda),
+       is_judicial     = COALESCE(EXCLUDED.is_judicial, leiloes.is_judicial),
+       permite_parcelamento      = COALESCE(EXCLUDED.permite_parcelamento, leiloes.permite_parcelamento),
+       parcelamento_entrada_pct  = COALESCE(EXCLUDED.parcelamento_entrada_pct, leiloes.parcelamento_entrada_pct),
+       parcelamento_parcelas_max = COALESCE(EXCLUDED.parcelamento_parcelas_max, leiloes.parcelamento_parcelas_max),
+       parcelamento_trecho       = COALESCE(EXCLUDED.parcelamento_trecho, leiloes.parcelamento_trecho),
        updated_at  = now()
      RETURNING id`,
     [
@@ -108,8 +130,14 @@ async function upsertLeilao(
       leilaoUrl(slug, auctionExternalId),
       dataInicio || null,
       doc.auction_date_end || null,
-      mapStatusLeilao(doc.auction_status),
+      mapStatusLeilao(doc.auction_status ?? doc.status),
       doc.client_name ? String(doc.client_name) : null,
+      condicoes ?? null,
+      ehJudicial ?? null,
+      condicoes ? parc.permite : null,
+      parc.entradaPct ?? null,
+      parc.parcelasMax ?? null,
+      parc.trecho ?? null,
     ],
   );
   cacheLeiloes.set(chave, r.rows[0].id);
@@ -129,9 +157,9 @@ async function upsertLote(
        leilao_id, leiloeiro_id, external_id, numero_lote, tipo, marca, modelo,
        ano_fabricacao, ano_modelo, cor, combustivel, km, condicao, tem_chave,
        descricao, lance_inicial, lance_atual, status, pagina_url, raw_scrape_id,
-       origem, comitente, cidade, uf, financiavel
+       origem, comitente, cidade, uf, financiavel, valor_mercado
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::status_lote,$19,$20,
-       $21,$22,$23,$24,$25)
+       $21,$22,$23,$24,$25,$26)
      ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
        lance_atual = EXCLUDED.lance_atual,
        lance_inicial = COALESCE(EXCLUDED.lance_inicial, lotes.lance_inicial),
@@ -145,6 +173,7 @@ async function upsertLote(
        cidade = COALESCE(EXCLUDED.cidade, lotes.cidade),
        uf = COALESCE(EXCLUDED.uf, lotes.uf),
        financiavel = COALESCE(EXCLUDED.financiavel, lotes.financiavel),
+       valor_mercado = COALESCE(EXCLUDED.valor_mercado, lotes.valor_mercado),
        last_seen_at = now(),
        updated_at = now()
      RETURNING id,
@@ -161,7 +190,7 @@ async function upsertLote(
       l.descricao ?? null, l.lanceInicial ?? null, l.lanceAtual ?? null,
       status, l.paginaUrl, rawScrapeId,
       l.origem ?? null, l.comitente ?? null, l.cidade ?? null, l.uf ?? null,
-      l.financiavel ?? null,
+      l.financiavel ?? null, l.valorMercado ?? null,
     ],
   );
   return {

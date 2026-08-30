@@ -1,5 +1,6 @@
 import { SodreSantoroApiAdapter } from './adapters/sodre-santoro-api';
 import { FreitasAdapter } from './adapters/freitas';
+import { MegaAdapter } from './adapters/mega';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -52,9 +53,23 @@ async function coletarFreitas(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+async function coletarMega(hasDb: boolean): Promise<number> {
+  const a = new MegaAdapter();
+  console.log(`\n[${a.slug}] paginando /veiculos (HTML) — acervo judicial...`);
+  const lotes = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'veiculos');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
+  'mega-leiloes': coletarMega,
 };
 
 async function main() {

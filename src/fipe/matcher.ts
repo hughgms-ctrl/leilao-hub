@@ -108,6 +108,12 @@ const SERIE_ESPECIAL = [
 
 const PENALIDADE_SERIE_ESPECIAL = 0.75;
 
+/**
+ * Quantas entradas da FIPE tentar antes de desistir. A mesma placa de
+ * modelo aparece em várias gerações; passar de ~5 só gasta chamada.
+ */
+const MAX_CANDIDATOS_MODELO = 5;
+
 function ehSerieEspecialNaoPedida(queryNorm: string, candidatoNorm: string): boolean {
   return SERIE_ESPECIAL.some((re) => re.test(candidatoNorm) && !re.test(queryNorm));
 }
@@ -137,20 +143,22 @@ export function pontuarMelhorVariante(query: string, candidato: string): number 
 }
 
 function best(list: { code: string; name: string }[], query: string) {
-  let bestItem = null as null | { code: string; name: string };
-  let bestScore = 0;
+  const r = ranquear(list, query);
+  return { item: r.length ? r[0].item : null, score: r.length ? r[0].score : 0 };
+}
+
+/** Todos os candidatos ordenados por score, do melhor para o pior. */
+function ranquear(list: { code: string; name: string }[], query: string) {
   const queryExpandida = expandirAbreviacoes(query); // expande uma vez só
-  for (const item of list) {
-    const s = Math.max(
-      pontuarCandidato(query, item.name),
-      pontuarCandidato(queryExpandida, item.name),
-    );
-    if (s > bestScore) {
-      bestScore = s;
-      bestItem = item;
-    }
-  }
-  return { item: bestItem, score: bestScore };
+  return list
+    .map((item) => ({
+      item,
+      score: Math.max(
+        pontuarCandidato(query, item.name),
+        pontuarCandidato(queryExpandida, item.name),
+      ),
+    }))
+    .sort((a, b) => b.score - a.score);
 }
 
 // ---------- categoria do leiloeiro → tipo FIPE ----------
@@ -188,21 +196,38 @@ export async function matchFipe(
   const b = best(brands, lote.marca);
   if (!b.item || b.score < 0.5) return null;
 
-  // 2. modelo — best() já compara nas duas convenções (crua e expandida)
+  // 2 e 3. modelo + ano, juntos.
+  //
+  // O melhor match POR NOME nem sempre cobre o ano do lote: a FIPE quebra
+  // o mesmo nome em várias entradas por geração ("Palio Weekend Adventure
+  // 1.6 8V/16V" só tem 1999-2003). Antes pegávamos o primeiro colocado e
+  // desistíamos quando faltava o ano — perdendo match que existia numa
+  // entrada logo abaixo. Agora descemos o ranking até achar quem tenha o
+  // ano, sem afrouxar o corte de confiança.
   const models = await getModels(type, b.item.code);
-  const m = best(models, lote.modelo);
-  if (!m.item) return null;
+  const fuel = fuelCode(lote.combustivel);
+  const candidatos = ranquear(models, lote.modelo).slice(0, MAX_CANDIDATOS_MODELO);
+
+  let m: { item: { code: string; name: string }; score: number } | null = null;
+  let yearId: string | undefined;
+
+  for (const c of candidatos) {
+    const scoreTotal = Number((0.3 * b.score + 0.7 * c.score).toFixed(3));
+    if (scoreTotal < FIPE_MATCH_MIN_SCORE) break; // ranking é decrescente
+
+    const years = await getYears(type, b.item.code, c.item.code);
+    const achado =
+      years.find((y) => y.code === `${lote.anoModelo}-${fuel}`)?.code ??
+      years.find((y) => y.code.startsWith(`${lote.anoModelo}-`))?.code;
+    if (achado) {
+      m = c;
+      yearId = achado;
+      break;
+    }
+  }
+  if (!m || !yearId) return null;
 
   const matchScore = Number((0.3 * b.score + 0.7 * m.score).toFixed(3));
-  if (matchScore < FIPE_MATCH_MIN_SCORE) return null;
-
-  // 3. ano — FIPE usa ids "2014-1" (ano-combustível); 32000 = zero km
-  const years = await getYears(type, b.item.code, m.item.code);
-  const fuel = fuelCode(lote.combustivel);
-  const yearId =
-    years.find((y) => y.code === `${lote.anoModelo}-${fuel}`)?.code ??
-    years.find((y) => y.code.startsWith(`${lote.anoModelo}-`))?.code;
-  if (!yearId) return null;
 
   // 4. preço — cache persistente primeiro
   const mesRef = new Date();

@@ -239,5 +239,6 @@ CREATE TABLE IF NOT EXISTS alertas (
 INSERT INTO leiloeiros (slug, nome, site_url, taxa_comissao)
 VALUES
   ('sodre-santoro',     'Sodré Santoro',     'https://www.sodresantoro.com.br',     0.05),
-  ('freitas-leiloeiro', 'Freitas Leiloeiro', 'https://www.freitasleiloeiro.com.br', 0.05)
+  ('freitas-leiloeiro', 'Freitas Leiloeiro', 'https://www.freitasleiloeiro.com.br', 0.05),
+  ('mega-leiloes',      'Mega Leilões',      'https://www.megaleiloes.com.br',       0.05)
 ON CONFLICT (slug) DO NOTHING;
