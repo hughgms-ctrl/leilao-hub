@@ -25,12 +25,12 @@ concurrency:
 jobs:
   pipeline:
     runs-on: ubuntu-latest
-    # Medido no 1º run real: 36,5 min no total (normalize sozinho ~32 min,
-    # porque cada query é round-trip até a Supabase em sa-east-1).
-    # ATENÇÃO: na virada do mês o cache da FIPE (mes_referencia) inteiro
-    # expira e ~390 lotes voltam a bater na API a 600 ms cada — esse run
-    # deve passar de 45 min. Se falhar por timeout no dia 1º, suba aqui.
-    timeout-minutes: 45
+    # Medido com UMA fonte (705 lotes): 36,5 min, dos quais ~32 de
+    # normalize — o custo é round-trip de query até a Supabase em
+    # sa-east-1, e escala com o número de lotes. Com a Freitas somos
+    # 1.305, então 45 min não cabia mais. Margem larga também cobre a
+    # virada do mês, quando o cache da FIPE expira inteiro.
+    timeout-minutes: 90
 
     env:
       DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
