@@ -1,0 +1,21 @@
+{
+  "name": "@leilao-hub/scrapers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape": "tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "normalize": "tsx src/run-normalizer.ts"
+  },
+  "dependencies": {
+    "pg": "^8.12.0",
+    "playwright": "^1.46.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

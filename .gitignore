@@ -1,0 +1,36 @@
+# dependências
+node_modules/
+.pnp
+.pnp.js
+
+# build
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# env — NUNCA commitar credencial de banco
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-error.log*
+leilao-logs/
+
+# fixtures de teste FICAM no repo (sample-response.json é usado para
+# iterar no parser sem bater no site). Só o dump do request é descartável.
+sample-request.json
+
+# SO / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# vercel
+.vercel/
