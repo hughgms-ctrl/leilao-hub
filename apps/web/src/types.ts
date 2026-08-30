@@ -24,7 +24,8 @@ export interface Lote {
   codigo_fipe: string | null;
   fipe_preco: string | null;
   pagina_url: string | null;
-  imagem: string | null;
+  imagens: string[] | null;
+  financiavel: boolean | null;
 }
 
 export interface ListaResposta {
@@ -47,10 +48,50 @@ export interface Stats {
   com_score: number;
   confirmados: number;
   especulativos: number;
+  financiaveis: number;
   score_medio: number | null;
   por_tipo: GrupoStat[];
   por_uf: GrupoStat[];
   por_condicao: GrupoStat[];
   por_origem: GrupoStat[];
   marcas: GrupoStat[];
+}
+
+export interface LanceHistorico {
+  valor: string;
+  observado_em: string;
+}
+
+/** Resposta de GET /api/lotes/:id — o lote mais o contexto do leilão. */
+export interface LoteDetalhe extends Lote {
+  descricao: string | null;
+  combustivel: string | null;
+  tem_chave: boolean | null;
+  comitente: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+
+  leilao_external_id: string | null;
+  leilao_titulo: string | null;
+  leilao_url: string | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+  modalidade: string | null;
+  leilao_cidade: string | null;
+  leilao_status: string | null;
+  edital_pdf_url: string | null;
+  condicoes_pagamento: string | null;
+  leilao_leiloeiro: string | null;
+  jucesp: string | null;
+  is_judicial: boolean | null;
+
+  leiloeiro_slug: string | null;
+  leiloeiro_nome: string | null;
+  taxa_comissao: string | null;
+
+  fipe_marca: string | null;
+  fipe_modelo: string | null;
+  fipe_mes_referencia: string | null;
+
+  historico_lances: LanceHistorico[];
 }

@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { titulo } from '@/lib/utils';
 import type { Stats } from '@/types';
 import type { Filtros as FiltrosMap } from '@/hooks';
-import { Search, X } from 'lucide-react';
+import { Search, X, BadgeCheck } from 'lucide-react';
 
 const TODOS = '__todos__';
 
@@ -50,6 +50,7 @@ export function Filtros({
 }) {
   const tipoScore = filtros.score_tipo ?? 'confirmado';
   const algumFiltro = Object.keys(filtros).some((k) => k !== 'page');
+  const aoAlternarFinanciavel = (v: string) => setFiltro('financiavel', v);
 
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4">
@@ -124,6 +125,20 @@ export function Filtros({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={filtros.financiavel === 'true' ? 'default' : 'outline'}
+          onClick={() =>
+            aoAlternarFinanciavel(filtros.financiavel === 'true' ? '' : 'true')
+          }
+        >
+          <BadgeCheck className="mr-1 h-4 w-4" />
+          Só financiáveis
+          {stats ? ` (${stats.financiaveis})` : ''}
+        </Button>
       </div>
 
       {algumFiltro && (

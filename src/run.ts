@@ -35,8 +35,17 @@ async function main() {
     const { raw, parsed } = await adapter.fetchAllLots();
     console.log(`[${adapter.slug}] ${raw.length} lotes coletados`);
 
+    // Segunda coleta, no MESMO run (aproveita os cookies do bootstrap):
+    // detalhe dos leilões ativos referenciados pelos lotes.
+    console.log(`[${adapter.slug}] coletando detalhe dos leilões...`);
+    const leiloes = await adapter.fetchAuctions(raw);
+    console.log(`[${adapter.slug}] ${leiloes.length} leilões detalhados`);
+
     if (hasDb) {
       await saveRawScrape(adapter.slug, 'lot_detail', { results: raw }, 'api/search-lots');
+      if (leiloes.length) {
+        await saveRawScrape(adapter.slug, 'auction_list', { results: leiloes }, 'api/auctions');
+      }
       console.log(`[${adapter.slug}] salvo em raw_scrapes`);
     } else {
       console.log(`[${adapter.slug}] DIRECT_DATABASE_URL ausente — pulando gravação (modo exploração)`);

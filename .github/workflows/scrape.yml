@@ -1,23 +1,23 @@
-# Plano B: worker no GitHub Actions em vez do VPS.
+# Worker: coleta do leiloeiro + normalização, no GitHub Actions.
 #
-# DESATIVADO DE PROPÓSITO: só roda quando você clica "Run workflow" na aba
-# Actions (workflow_dispatch). O bloco `schedule` está comentado — se
-# descomentar, DESLIGUE o cron do VPS antes, senão os dois batem no site
-# no mesmo horário e dobram a carga sobre o leiloeiro.
+# O schedule está COMENTADO de propósito. Ative só quando o run manual
+# estiver verde — e, se um dia voltar a existir um worker em VPS,
+# DESLIGUE um dos dois: rodar os dois dobra a carga sobre o leiloeiro.
 name: scrape + normalize
 
 on:
   workflow_dispatch:
     inputs:
       pular_scrape:
-        description: 'Rodar só o normalize (não bate no site)'
+        description: 'Rodar só o normalize (não bate no site do leiloeiro)'
         type: boolean
         default: false
 
   # schedule:
   #   - cron: '0 */6 * * *'   # a cada 6h — ver aviso acima
 
-# Uma execução por vez: Actions não tem flock, isto faz o mesmo papel.
+# Nunca dois runs em paralelo: duas coletas simultâneas furariam o
+# DELAY_MS de 2s que existe para não tomar bloqueio do Azion.
 concurrency:
   group: pipeline-leilao
   cancel-in-progress: false
@@ -25,7 +25,7 @@ concurrency:
 jobs:
   pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     env:
       DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
@@ -42,14 +42,18 @@ jobs:
         run: npm ci
 
       - name: Instalar Chromium do Playwright
+        # o bootstrap de cookies do Azion precisa de um browser real
         run: npx playwright install --with-deps chromium
 
-      - name: Conferir segredo do banco
+      - name: Conferir secret do banco
+        # falha cedo e com mensagem clara em vez de estourar no meio do scrape.
+        # Nunca imprime o valor — só se existe.
         run: |
           if [ -z "$DIRECT_DATABASE_URL" ]; then
-            echo "::error::secret DIRECT_DATABASE_URL não configurado no repositório"
+            echo "::error::secret DIRECT_DATABASE_URL não configurado no repositório (Settings > Secrets and variables > Actions)"
             exit 1
           fi
+          echo "secret presente"
 
       - name: Scrape
         if: ${{ !inputs.pular_scrape }}
@@ -58,7 +62,13 @@ jobs:
       - name: Normalize
         run: npm run normalize
 
-      # Sobe o log como artefato: o runner é descartado ao fim do job.
+      # Bloqueio do Azion é SILENCIOSO: o scrape termina com exit 0 e zero
+      # lote coletado. Sem este passo o workflow ficaria verde com a base
+      # envelhecendo. Aqui isso vira ❌.
+      - name: Verificar que a coleta atualizou dados
+        if: ${{ !inputs.pular_scrape }}
+        run: npm run verify
+
       - name: Guardar log
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { mapSodreDoc, mapStatus, type DbLot } from './mappers/sodre';
+import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/sodre';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
 import { poolConfigDireto } from '../pg-config';
@@ -33,18 +33,50 @@ async function ensureLeiloeiro(slug: string): Promise<Leiloeiro> {
   return { id: r.rows[0].id, taxa_comissao: Number(r.rows[0].taxa_comissao) };
 }
 
-async function upsertLeilaoStub(leiloeiroId: number, auctionExternalId: string): Promise<number> {
+/** auction_status do leiloeiro → enum status_leilao do banco */
+function mapStatusLeilao(s?: string): string {
+  const v = (s ?? '').toLowerCase();
+  if (/encerrad/.test(v)) return 'encerrado';
+  if (/online|aberto|andamento/.test(v)) return 'em_andamento';
+  return 'agendado';
+}
+
+/**
+ * Upsert do leilão a partir do PRÓPRIO documento de lote.
+ *
+ * O documento de lote já carrega auction_name, auction_date_init,
+ * auction_date_end, auction_status e client_name — dá para ter título e
+ * datas reais sem gastar request nenhum. O detalhe do leilão
+ * (processarLeiloes) só acrescenta o que não vem aqui: condições de
+ * venda, leiloeiro/JUCESP, modalidade.
+ */
+async function upsertLeilao(
+  leiloeiroId: number,
+  auctionExternalId: string,
+  doc: Record<string, any>,
+): Promise<number> {
   const r = await pool.query(
-    `INSERT INTO leiloes (leiloeiro_id, external_id, titulo, pagina_url)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (leiloeiro_id, external_id)
-       DO UPDATE SET updated_at = now()
+    `INSERT INTO leiloes (
+       leiloeiro_id, external_id, titulo, pagina_url,
+       data_inicio, data_fim, status, comitente
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7::status_leilao,$8)
+     ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
+       titulo      = COALESCE(EXCLUDED.titulo, leiloes.titulo),
+       data_inicio = COALESCE(EXCLUDED.data_inicio, leiloes.data_inicio),
+       data_fim    = COALESCE(EXCLUDED.data_fim, leiloes.data_fim),
+       status      = EXCLUDED.status,
+       comitente   = COALESCE(EXCLUDED.comitente, leiloes.comitente),
+       updated_at  = now()
      RETURNING id`,
     [
       leiloeiroId,
       auctionExternalId,
-      `Leilão ${auctionExternalId}`, // stub; enriquecer com scrape de leilões depois
+      doc.auction_name ? String(doc.auction_name) : `Leilão ${auctionExternalId}`,
       `https://www.sodresantoro.com.br/leilao/${auctionExternalId}`,
+      doc.auction_date_init || null,
+      doc.auction_date_end || null,
+      mapStatusLeilao(doc.auction_status),
+      doc.client_name ? String(doc.client_name) : null,
     ],
   );
   return r.rows[0].id;
@@ -63,9 +95,9 @@ async function upsertLote(
        leilao_id, leiloeiro_id, external_id, numero_lote, tipo, marca, modelo,
        ano_fabricacao, ano_modelo, cor, combustivel, km, condicao, tem_chave,
        descricao, lance_inicial, lance_atual, status, pagina_url, raw_scrape_id,
-       origem, comitente, cidade, uf
+       origem, comitente, cidade, uf, financiavel
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::status_lote,$19,$20,
-       $21,$22,$23,$24)
+       $21,$22,$23,$24,$25)
      ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
        lance_atual = EXCLUDED.lance_atual,
        lance_inicial = COALESCE(EXCLUDED.lance_inicial, lotes.lance_inicial),
@@ -78,6 +110,7 @@ async function upsertLote(
        comitente = COALESCE(EXCLUDED.comitente, lotes.comitente),
        cidade = COALESCE(EXCLUDED.cidade, lotes.cidade),
        uf = COALESCE(EXCLUDED.uf, lotes.uf),
+       financiavel = COALESCE(EXCLUDED.financiavel, lotes.financiavel),
        last_seen_at = now(),
        updated_at = now()
      RETURNING id,
@@ -93,6 +126,7 @@ async function upsertLote(
       l.descricao ?? null, l.lanceInicial ?? null, l.lanceAtual ?? null,
       status, l.paginaUrl, rawScrapeId,
       l.origem ?? null, l.comitente ?? null, l.cidade ?? null, l.uf ?? null,
+      l.financiavel ?? null,
     ],
   );
   return {
@@ -204,19 +238,87 @@ async function aplicarFipeEScore(
   return true;
 }
 
+/**
+ * Enriquece `leiloes` com o detalhe vindo de /api/auctions/{id}.
+ *
+ * Atualiza o registro que o processamento de lotes já criou — o upsert é
+ * por (leiloeiro_id, external_id), então stub existente é ATUALIZADO,
+ * nunca duplicado. Campos vazios no detalhe não sobrescrevem o que já
+ * está preenchido (COALESCE em tudo que é opcional).
+ */
+async function processarLeiloes(
+  leiloeiroId: number,
+  docs: Record<string, any>[],
+): Promise<number> {
+  let ok = 0;
+  for (const doc of docs) {
+    const a = mapSodreAuction(doc);
+    if (!a) continue;
+    await pool.query(
+      `INSERT INTO leiloes (
+         leiloeiro_id, external_id, titulo, pagina_url, modalidade,
+         data_inicio, cidade, comitente, edital_pdf_url,
+         condicoes_venda, condicoes_pagamento, leiloeiro_nome, jucesp, is_judicial
+       ) VALUES ($1,$2,$3,$4,$5::modalidade_leilao,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
+         titulo              = COALESCE(EXCLUDED.titulo, leiloes.titulo),
+         modalidade          = EXCLUDED.modalidade,
+         data_inicio         = COALESCE(EXCLUDED.data_inicio, leiloes.data_inicio),
+         cidade              = COALESCE(EXCLUDED.cidade, leiloes.cidade),
+         comitente           = COALESCE(EXCLUDED.comitente, leiloes.comitente),
+         edital_pdf_url      = COALESCE(EXCLUDED.edital_pdf_url, leiloes.edital_pdf_url),
+         condicoes_venda     = COALESCE(EXCLUDED.condicoes_venda, leiloes.condicoes_venda),
+         condicoes_pagamento = COALESCE(EXCLUDED.condicoes_pagamento, leiloes.condicoes_pagamento),
+         leiloeiro_nome      = COALESCE(EXCLUDED.leiloeiro_nome, leiloes.leiloeiro_nome),
+         jucesp              = COALESCE(EXCLUDED.jucesp, leiloes.jucesp),
+         is_judicial         = COALESCE(EXCLUDED.is_judicial, leiloes.is_judicial),
+         updated_at          = now()`,
+      [
+        leiloeiroId, a.externalId, a.titulo ?? null,
+        `https://www.sodresantoro.com.br/leilao/${a.externalId}`,
+        a.modalidade ?? 'online',
+        a.dataInicio ?? null, a.cidade ?? null, a.comitente ?? null,
+        a.editalPdfUrl ?? null, a.condicoesVenda ?? null, a.condicoesPagamento ?? null,
+        a.leiloeiroNome ?? null, a.jucesp ?? null, a.isJudicial ?? null,
+      ],
+    );
+    ok++;
+  }
+  return ok;
+}
+
 export async function processarPendentes(): Promise<void> {
   const pendentes = await pool.query(
-    `SELECT rs.id, rs.payload, rs.leiloeiro_id, le.slug
+    `SELECT rs.id, rs.tipo, rs.payload, rs.leiloeiro_id, le.slug
      FROM raw_scrapes rs
      JOIN leiloeiros le ON le.id = rs.leiloeiro_id
-     WHERE rs.processado = false AND rs.tipo = 'lot_detail'
-     ORDER BY rs.scraped_at
+     WHERE rs.processado = false AND rs.tipo IN ('lot_detail','auction_list')
+     ORDER BY rs.tipo DESC, rs.scraped_at
      LIMIT 20`,
   );
 
   console.log(`[normalizer] ${pendentes.rowCount} raw_scrapes pendentes`);
 
   for (const row of pendentes.rows) {
+    // auction_list é enriquecimento de leilão: não passa pelo mapper de lote
+    if (row.tipo === 'auction_list') {
+      try {
+        const leiloeiro = await ensureLeiloeiro(row.slug);
+        const n = await processarLeiloes(leiloeiro.id, row.payload?.results ?? []);
+        await pool.query(
+          `UPDATE raw_scrapes SET processado = true, erro = null WHERE id = $1`,
+          [row.id],
+        );
+        console.log(`[normalizer] raw ${row.id}: ${n} leilões enriquecidos`);
+      } catch (e) {
+        await pool.query(`UPDATE raw_scrapes SET erro = $2 WHERE id = $1`, [
+          row.id, (e as Error).message,
+        ]);
+        console.error(`[normalizer] raw ${row.id} (leilões) falhou:`, e);
+      }
+      continue;
+    }
+
     const mapper = MAPPERS[row.slug];
     if (!mapper) {
       await pool.query(
@@ -236,7 +338,7 @@ export async function processarPendentes(): Promise<void> {
         const l = mapper(doc);
         if (!l) continue;
 
-        const leilaoId = await upsertLeilaoStub(leiloeiro.id, l.auctionExternalId);
+        const leilaoId = await upsertLeilao(leiloeiro.id, l.auctionExternalId, doc);
         const { id: loteId, lanceAnterior } = await upsertLote(
           leiloeiro.id, leilaoId, row.id, l,
         );

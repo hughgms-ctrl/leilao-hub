@@ -308,6 +308,62 @@ export class SodreSantoroApiAdapter {
       .filter(Boolean);
   }
 
+  /**
+   * Detalhe de UM leilão.
+   *
+   * Endpoint: GET /api/auctions/{id} — proxy Nuxt para
+   * prd-api.sodresantoro.com.br/api/v1/auctions/{id}/detail.
+   * NÃO existe endpoint de listagem (/api/auctions e variações dão 404);
+   * a descoberta veio do 400 que vazou a URL do backend.
+   *
+   * Só leilão ainda em andamento responde 200 — encerrado devolve 404,
+   * e por isso o chamador filtra por status antes de pedir.
+   */
+  async fetchAuctionDetail(auctionId: string | number): Promise<Record<string, any> | null> {
+    const res = await fetch(`${BASE_URL}/api/auctions/${auctionId}`, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+        Cookie: this.cookieHeader,
+        Referer: `${BASE_URL}/veiculos/lotes`,
+      },
+    });
+    if (res.status === 404) return null; // leilão encerrado: sem detalhe
+    if (!res.ok) throw new Error(`auctions/${auctionId}: HTTP ${res.status}`);
+    return (await res.json()) as Record<string, any>;
+  }
+
+  /**
+   * Busca o detalhe dos leilões ainda ativos referenciados pelos lotes.
+   * Um request por leilão, sequencial, com o mesmo DELAY_MS dos lotes.
+   */
+  async fetchAuctions(lotes: Record<string, any>[]): Promise<Record<string, any>[]> {
+    if (!this.cookieHeader) await this.bootstrap();
+
+    // encerrado sempre devolve 404 — não vale gastar request
+    const ativos = new Map<string, string>();
+    for (const l of lotes) {
+      const id = String(l.auction_id ?? '');
+      const status = String(l.auction_status ?? '');
+      if (id && status !== 'encerrado') ativos.set(id, status);
+    }
+
+    const ids = [...ativos.keys()];
+    console.log(`[${this.slug}] ${ids.length} leilões ativos para detalhar`);
+
+    const out: Record<string, any>[] = [];
+    for (const id of ids) {
+      await sleep(DELAY_MS);
+      try {
+        const d = await this.fetchAuctionDetail(id);
+        if (d) out.push(d);
+      } catch (e) {
+        console.warn(`[${this.slug}] detalhe do leilão ${id} falhou:`, (e as Error).message);
+      }
+    }
+    return out;
+  }
+
   private toInt(v: unknown): number | undefined {
     const n = parseInt(String(v), 10);
     return Number.isFinite(n) ? n : undefined;

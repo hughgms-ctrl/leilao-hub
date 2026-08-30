@@ -6,7 +6,8 @@
   "scripts": {
     "scrape": "tsx src/run.ts",
     "typecheck": "tsc --noEmit",
-    "normalize": "tsx src/run-normalizer.ts"
+    "normalize": "tsx src/run-normalizer.ts",
+    "verify": "tsx src/verificar-scrape.ts"
   },
   "dependencies": {
     "pg": "^8.12.0",

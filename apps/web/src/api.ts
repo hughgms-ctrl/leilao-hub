@@ -19,3 +19,6 @@ export const buscarOportunidades = (params: Record<string, string>) =>
   get<ListaResposta>('/api/oportunidades', params);
 
 export const buscarStats = () => get<Stats>('/api/stats');
+
+export const buscarLote = (id: string | number) =>
+  get<import('./types').LoteDetalhe>(`/api/lotes/${id}`);

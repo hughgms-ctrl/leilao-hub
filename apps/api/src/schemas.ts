@@ -27,6 +27,8 @@ export const listaLotesSchema = z.object({
   marca: str,
   busca: str,
   score_tipo: z.enum(SCORE_TIPOS).optional(),
+  // querystring nao tem boolean: aceita 'true'/'false' e converte
+  financiavel: z.enum(['true', 'false']).optional(),
   order: z.enum(ORDER_COLS).optional().default('score'),
   dir: z.enum(ORDER_DIRS).optional().default('desc'),
   page: z.coerce.number().int().min(1).optional().default(1),

@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS leiloes (
   edital_pdf_url TEXT,
   pagina_url     TEXT,
   comitente      TEXT,
+  -- enriquecimento vindo de /api/auctions/{id} (migração 004).
+  -- condicoes_venda é o texto integral; condicoes_pagamento é o recorte
+  -- que fala de pagamento. Não há URL de edital em PDF em nenhum payload.
+  condicoes_venda     TEXT,
+  condicoes_pagamento TEXT,
+  leiloeiro_nome      TEXT,
+  jucesp              TEXT,
+  is_judicial         BOOLEAN,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (leiloeiro_id, external_id)
@@ -115,6 +123,7 @@ CREATE TABLE IF NOT EXISTS lotes (
   score_oportunidade   NUMERIC(6,4),
   custo_estimado_total NUMERIC(12,2),
   score_tipo           TEXT,   -- 'confirmado' | 'especulativo' (migração 003)
+  financiavel          BOOLEAN,-- lot_status_financeable (migração 004)
 
   pagina_url       TEXT,
   raw_scrape_id    BIGINT,
@@ -134,6 +143,8 @@ CREATE INDEX IF NOT EXISTS idx_lotes_uf ON lotes (uf);
 CREATE INDEX IF NOT EXISTS idx_lotes_origem ON lotes (origem);
 CREATE INDEX IF NOT EXISTS idx_lotes_score_tipo
   ON lotes (score_tipo, score_oportunidade DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_lotes_financiavel
+  ON lotes (financiavel) WHERE financiavel = true;
 
 -- ---------- IMAGENS ----------
 CREATE TABLE IF NOT EXISTS lote_imagens (

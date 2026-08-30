@@ -36,6 +36,8 @@ function montarFiltros(q: ListaLotesQuery, opts: OpcoesLista = {}) {
     );
   }
 
+  if (q.financiavel) add('l.financiavel IS NOT DISTINCT FROM ?', q.financiavel === 'true');
+
   // 'todos' não filtra; ausência de score_tipo também não
   if (q.score_tipo && q.score_tipo !== 'todos') {
     add('l.score_tipo = ?', q.score_tipo);
@@ -57,7 +59,8 @@ const COLUNAS_ITEM = `
   l.lance_inicial, l.lance_atual, ${LANCE_REF_SQL} AS lance_referencia,
   l.custo_estimado_total, l.score_oportunidade, l.score_tipo,
   l.fipe_match_score, l.codigo_fipe, fp.preco AS fipe_preco,
-  l.pagina_url, img.url AS imagem`;
+  l.financiavel,
+  l.pagina_url, img.urls AS imagens`;
 
 export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   const { clause, params } = montarFiltros(q, opts);
@@ -70,8 +73,14 @@ export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
     FROM lotes l
     LEFT JOIN fipe_precos fp ON fp.id = l.fipe_preco_id
     LEFT JOIN LATERAL (
-      SELECT li.url FROM lote_imagens li
-      WHERE li.lote_id = l.id ORDER BY li.ordem LIMIT 1
+      -- ate 8 fotos por lote, na ordem, para o carrossel do card.
+      -- O LIMIT fica na subconsulta interna: agregar tudo e cortar depois
+      -- traria as 13+ fotos de cada lote so para descartar.
+      SELECT array_agg(f.url ORDER BY f.ordem) AS urls
+      FROM (
+        SELECT li.url, li.ordem FROM lote_imagens li
+        WHERE li.lote_id = l.id ORDER BY li.ordem LIMIT 8
+      ) f
     ) img ON true
     ${clause}
     ORDER BY ${col} ${dir} NULLS LAST, l.id ASC
@@ -100,6 +109,9 @@ export async function buscarLote(id: number) {
             l.first_seen_at, l.last_seen_at,
             le.external_id AS leilao_external_id, le.titulo AS leilao_titulo,
             le.pagina_url AS leilao_url, le.data_inicio, le.data_fim,
+            le.modalidade, le.cidade AS leilao_cidade, le.status AS leilao_status,
+            le.edital_pdf_url, le.condicoes_pagamento, le.leiloeiro_nome AS leilao_leiloeiro,
+            le.jucesp, le.is_judicial,
             lo.slug AS leiloeiro_slug, lo.nome AS leiloeiro_nome,
             lo.taxa_comissao,
             fp.marca AS fipe_marca, fp.modelo AS fipe_modelo,
@@ -109,8 +121,11 @@ export async function buscarLote(id: number) {
      LEFT JOIN leiloes le ON le.id = l.leilao_id
      LEFT JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
      LEFT JOIN LATERAL (
-       SELECT li.url FROM lote_imagens li
-       WHERE li.lote_id = l.id ORDER BY li.ordem LIMIT 1
+       SELECT array_agg(f.url ORDER BY f.ordem) AS urls
+       FROM (
+         SELECT li.url, li.ordem FROM lote_imagens li
+         WHERE li.lote_id = l.id ORDER BY li.ordem LIMIT 8
+       ) f
      ) img ON true
      WHERE l.id = $1`,
     [id],
@@ -128,7 +143,13 @@ export async function buscarLote(id: number) {
     ),
   ]);
 
-  return { ...lote.rows[0], imagens: imagens.rows, historico_lances: lances.rows };
+  return {
+    ...lote.rows[0],
+    // string[] igual a listagem: o carrossel consome os dois lugares.
+    // Aqui vem a galeria COMPLETA (sem o LIMIT 8 do card).
+    imagens: imagens.rows.map((r: { url: string }) => r.url),
+    historico_lances: lances.rows,
+  };
 }
 
 export async function estatisticas() {
@@ -138,6 +159,7 @@ export async function estatisticas() {
            count(score_oportunidade)::int AS com_score,
            count(*) FILTER (WHERE score_tipo = 'confirmado')::int AS confirmados,
            count(*) FILTER (WHERE score_tipo = 'especulativo')::int AS especulativos,
+           count(*) FILTER (WHERE financiavel)::int AS financiaveis,
            round(avg(score_oportunidade), 4) AS score_medio
     FROM lotes`);
 
