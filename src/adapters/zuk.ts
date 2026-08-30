@@ -59,6 +59,8 @@ export interface ZukRawLot {
   paginaUrl: string;
   /** nº do processo judicial, só vem na página de detalhe */
   processo?: string;
+  /** "Observações" do lote, onde fica a condição de venda (detalhe) */
+  condicoes?: string;
 }
 
 export class ZukAdapter {
@@ -145,7 +147,11 @@ export class ZukAdapter {
    * aninhado guarda o excedente que o "ver mais" revelaria. Não precisa
    * de browser.
    */
-  parseDetalhe(html: string): { descricao: string; processo?: string } {
+  parseDetalhe(html: string): {
+    descricao: string;
+    processo?: string;
+    condicoes?: string;
+  } {
     const $ = cheerio.load(html);
     $('script, style, svg').remove();
 
@@ -156,7 +162,19 @@ export class ZukAdapter {
     const itens = $('.property-description-items').first().text();
     const processo = itens.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/)?.[0];
 
-    return { descricao, processo };
+    // "Observações" do lote: é aqui que sai a condição de venda de
+    // verdade — "2) Condição de venda: À vista (não admite utilização de
+    // carta de crédito)". O campo se chama `condicoes` porque é o nome
+    // que o normalizer já consome para rodar a detecção do art. 895.
+    //
+    // NÃO usar o simulador de parcelamento da página: ele é estático.
+    // Verificado em três lotes de R$ 500, R$ 10.762 e R$ 119.332 — todos
+    // exibem o mesmo "Mínimo: R$ 58.275,00" e "Mínimo 30% de Sinal",
+    // valor sem relação com o lote.
+    const condicoes = $('.div-text-observacoes').first().text()
+      .replace(/\s+/g, ' ').trim() || undefined;
+
+    return { descricao, processo, condicoes };
   }
 
   /** Enriquece cada lote com a descrição completa. Sequencial, com DELAY_MS. */
@@ -174,6 +192,7 @@ export class ZukAdapter {
           ok++;
         }
         if (d.processo) l.processo = d.processo;
+        if (d.condicoes) l.condicoes = d.condicoes;
       } catch {
         // um detalhe que falha não derruba a coleta
       }
