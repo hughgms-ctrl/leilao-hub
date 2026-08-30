@@ -242,3 +242,17 @@ VALUES
   ('freitas-leiloeiro', 'Freitas Leiloeiro', 'https://www.freitasleiloeiro.com.br', 0.05),
   ('mega-leiloes',      'Mega Leilões',      'https://www.megaleiloes.com.br',       0.05)
 ON CONFLICT (slug) DO NOTHING;
+
+-- ---------- ROW LEVEL SECURITY (migração 006) ----------
+-- Ligado SEM policy: bloqueia por completo o acesso via chave anon
+-- (PostgREST) e não afeta a nossa API, que conecta como `postgres` e tem
+-- BYPASSRLS. O frontend nunca fala com o Supabase direto.
+ALTER TABLE leiloeiros            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leiloes               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lotes                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lote_imagens          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lote_lances_historico ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fipe_precos           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raw_scrapes           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usuarios              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alertas               ENABLE ROW LEVEL SECURITY;

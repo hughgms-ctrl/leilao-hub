@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { listaLotesSchema, idSchema } from './schemas.js';
 import { listarLotes, buscarLote, estatisticas } from './queries.js';
 import { pool } from './db.js';
+import { limitePorIp, cacheDeBorda } from './protecao.js';
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
@@ -36,6 +37,8 @@ app.use(
   }),
 );
 app.use(express.json());
+app.use(limitePorIp);
+app.use(cacheDeBorda);
 
 /** erro de validação vira 400 com detalhe; o resto vira 500 */
 function comErro(fn: express.RequestHandler): express.RequestHandler {

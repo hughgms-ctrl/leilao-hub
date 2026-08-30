@@ -25,30 +25,55 @@ function tipoDe(primeiroCampo: string): string {
   return 'carros';
 }
 
-/** "Carro, VW/Fusca 1300, cor branca, 1980/1980, placas BUT-9876." */
+/**
+ * A descrição do Zuk vem em pelo menos três formatos, e o servidor trunca
+ * as longas. Nenhum campo estruturado — tudo sai daqui:
+ *
+ *   A) "Carro, VW/Fusca 1300, cor branca, 1980/1980, placas BUT-9876."
+ *   B) "LOTE 3: VEÍCULO VW GOL 1.0 GIV, PLACA FFN-3857, ANO 2013, EM..."
+ *   C) "LOTE 6.1 - 01(um) Veículo Iveco/Daily 35S14, diesel, ano de fab..."
+ *
+ * Por isso cada campo é procurado por PADRÃO no texto todo, e não por
+ * posição de vírgula: com truncagem, contar campo quebra.
+ */
 export function parseDescricao(desc: string): {
   tipo: string; marca?: string; modelo?: string; cor?: string;
   anoFab?: number; anoModelo?: number;
 } {
-  const partes = (desc || '').split(',').map((p) => p.trim()).filter(Boolean);
-  const tipo = tipoDe(partes[0] ?? '');
+  const t = (desc || '').trim();
+  const tipo = tipoDe(t);
 
-  // "VW/Fusca 1300" -> marca VW, modelo Fusca 1300
-  const marcaModelo = partes[1] ?? '';
-  const barra = marcaModelo.indexOf('/');
-  const marca = barra > 0 ? marcaModelo.slice(0, barra).trim() : undefined;
-  const modelo = barra > 0 ? marcaModelo.slice(barra + 1).trim() : marcaModelo || undefined;
+  // ano: "1980/1980" primeiro; senão "ANO 2013" / "ano de fabricação 2013"
+  const parAnos = t.match(/(\d{4})\s*\/\s*(\d{4})/);
+  const anoSolto = t.match(/ano(?:\s+de\s+fabrica[çc][ãa]o)?\s*:?\s*(\d{4})/i);
+  const anoFab = parAnos ? Number(parAnos[1]) : anoSolto ? Number(anoSolto[1]) : undefined;
+  const anoModelo = parAnos ? Number(parAnos[2]) : anoFab;
 
-  const corRaw = partes.find((p) => /^cor\s+/i.test(p));
-  const anos = (desc || '').match(/(\d{4})\s*\/\s*(\d{4})/);
+  // marca/modelo: o padrão "MARCA/MODELO" aparece em todos os formatos.
+  // Recorta até a próxima vírgula, que é onde o modelo termina.
+  const mm = t.match(/([A-Za-zÀ-ÿ]{2,})\s*\/\s*([^,.;]{2,60})/);
+  let marca = mm?.[1];
+  let modelo = mm?.[2]?.trim();
+
+  // sem barra: tenta o que vem depois de "VEÍCULO" (formato B)
+  if (!marca) {
+    const apos = t.match(/ve[íi]culo\s+([A-Za-zÀ-ÿ]{2,})\s+([^,.;]{2,60})/i);
+    marca = apos?.[1];
+    modelo = apos?.[2]?.trim();
+  }
+
+  const cor = t.match(/cor\s+([A-Za-zÀ-ÿ]+)/i)?.[1];
+
+  // descarta ano fora de faixa plausível (pega "1.0" virando ano, etc.)
+  const anoOk = (n?: number) => (n && n >= 1950 && n <= new Date().getFullYear() + 2 ? n : undefined);
 
   return {
     tipo,
     marca: marca ? marca.toLowerCase() : undefined,
     modelo: modelo ? modelo.toLowerCase() : undefined,
-    cor: corRaw ? corRaw.replace(/^cor\s+/i, '').toLowerCase() : undefined,
-    anoFab: anos ? Number(anos[1]) : undefined,
-    anoModelo: anos ? Number(anos[2]) : undefined,
+    cor: cor ? cor.toLowerCase() : undefined,
+    anoFab: anoOk(anoFab),
+    anoModelo: anoOk(anoModelo),
   };
 }
 
