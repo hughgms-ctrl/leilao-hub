@@ -66,13 +66,24 @@ function mapStatusLeilao(s?: string): string {
  * datas reais sem gastar request nenhum. O detalhe do leilão
  * (processarLeiloes) só acrescenta o que não vem aqui: condições de
  * venda, leiloeiro/JUCESP, modalidade.
+ *
+ * Cacheado por execução: o upsert era chamado uma vez POR LOTE — 1.305
+ * queries para ~70 leilões distintos. Os campos do leilão são iguais em
+ * todos os lotes dele, então a primeira chamada resolve e as demais
+ * reaproveitam o id.
  */
+const cacheLeiloes = new Map<string, number>();
+
 async function upsertLeilao(
   leiloeiroId: number,
   auctionExternalId: string,
   doc: Record<string, any>,
   slug: string,
 ): Promise<number> {
+  const chave = `${leiloeiroId}:${auctionExternalId}`;
+  const emCache = cacheLeiloes.get(chave);
+  if (emCache !== undefined) return emCache;
+
   // Sodré traz os campos do leilão no próprio documento do lote; Freitas
   // só publica data e hora no card. Lemos os dois vocabulários.
   const dataInicio = doc.auction_date_init || dataBrParaIso(doc.dataLeilao, doc.horaLeilao);
@@ -100,6 +111,7 @@ async function upsertLeilao(
       doc.client_name ? String(doc.client_name) : null,
     ],
   );
+  cacheLeiloes.set(chave, r.rows[0].id);
   return r.rows[0].id;
 }
 
@@ -109,7 +121,7 @@ async function upsertLote(
   leilaoId: number,
   rawScrapeId: number,
   l: DbLot,
-): Promise<{ id: number; lanceAnterior: number | null }> {
+): Promise<{ id: number; lanceAnterior: number | null; codigoFipeAnterior: string | null }> {
   const status = mapStatus(l.statusTexto);
   const r = await pool.query(
     `INSERT INTO lotes (
@@ -135,7 +147,8 @@ async function upsertLote(
        last_seen_at = now(),
        updated_at = now()
      RETURNING id,
-       (SELECT lance_atual FROM lotes o WHERE o.leiloeiro_id = $2 AND o.external_id = $3) AS lance_anterior`,
+       (SELECT lance_atual FROM lotes o WHERE o.leiloeiro_id = $2 AND o.external_id = $3) AS lance_anterior,
+       (SELECT codigo_fipe FROM lotes o WHERE o.leiloeiro_id = $2 AND o.external_id = $3) AS codigo_fipe_anterior`,
     [
       leilaoId, leiloeiroId, l.externalId, l.numeroLote ?? null,
       // tipo/condicao são NOT NULL: default textual quando o leiloeiro não informa
@@ -153,6 +166,7 @@ async function upsertLote(
   return {
     id: r.rows[0].id,
     lanceAnterior: r.rows[0].lance_anterior != null ? Number(r.rows[0].lance_anterior) : null,
+    codigoFipeAnterior: r.rows[0].codigo_fipe_anterior ?? null,
   };
 }
 
@@ -175,15 +189,26 @@ async function registrarLance(loteId: number, novo: number | undefined, anterior
   );
 }
 
+/**
+ * Insere TODAS as fotos do lote numa query só.
+ *
+ * Antes era um INSERT por imagem: com ~8.300 imagens na base, eram 8.300
+ * round-trips até a Supabase em sa-east-1 — de longe o maior custo do
+ * normalize. `unnest` transforma os dois arrays em linhas, e o
+ * ON CONFLICT DO NOTHING mantém a idempotência.
+ */
 async function inserirImagens(loteId: number, urls: string[]) {
-  for (let i = 0; i < urls.length; i++) {
-    await pool.query(
-      `INSERT INTO lote_imagens (lote_id, url, ordem)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (lote_id, url) DO NOTHING`,
-      [loteId, urls[i], i],
-    );
-  }
+  // dedup: URL repetida no mesmo array conflitaria contra si mesma
+  const unicas = [...new Set(urls.filter(Boolean))];
+  if (!unicas.length) return;
+
+  await pool.query(
+    `INSERT INTO lote_imagens (lote_id, url, ordem)
+     SELECT $1, u.url, u.ordem
+     FROM unnest($2::text[], $3::int[]) AS u(url, ordem)
+     ON CONFLICT (lote_id, url) DO NOTHING`,
+    [loteId, unicas, unicas.map((_, i) => i)],
+  );
 }
 
 /** Devolve true só quando houve preço FIPE de fato (match novo ou cache). */
@@ -191,20 +216,18 @@ async function aplicarFipeEScore(
   loteId: number,
   l: DbLot,
   taxaComissao: number,
+  codigoFipeAnterior: string | null,
 ): Promise<boolean> {
-  // Já tem código FIPE de execução anterior? Tenta o cache mensal primeiro.
-  const existente = await pool.query(
-    `SELECT codigo_fipe FROM lotes WHERE id = $1 AND codigo_fipe IS NOT NULL`,
-    [loteId],
-  );
-
+  // O código FIPE de execução anterior vem do RETURNING do upsert — antes
+  // isto era um SELECT extra por lote, só para descobrir o que o próprio
+  // upsert já sabia.
   let fipePrecoId: number | null = null;
   let codigoFipe: string | null = null;
   let preco: number | null = null;
   let matchScore: number | null = null;
 
-  if (existente.rowCount && l.anoModelo) {
-    codigoFipe = existente.rows[0].codigo_fipe;
+  if (codigoFipeAnterior && l.anoModelo) {
+    codigoFipe = codigoFipeAnterior;
     const cached = await cachedFipePrice(pool, codigoFipe!, l.anoModelo, l.combustivel);
     if (cached) {
       fipePrecoId = cached.fipePrecoId;
@@ -360,7 +383,7 @@ export async function processarPendentes(): Promise<void> {
         if (!l) continue;
 
         const leilaoId = await upsertLeilao(leiloeiro.id, l.auctionExternalId, doc, row.slug);
-        const { id: loteId, lanceAnterior } = await upsertLote(
+        const { id: loteId, lanceAnterior, codigoFipeAnterior } = await upsertLote(
           leiloeiro.id, leilaoId, row.id, l,
         );
         await registrarLance(loteId, l.lanceAtual, lanceAnterior);
@@ -370,7 +393,7 @@ export async function processarPendentes(): Promise<void> {
         if (l.marca && l.modelo && l.anoModelo) {
           try {
             // conta só quando houve preço FIPE de fato, não toda tentativa
-            if (await aplicarFipeEScore(loteId, l, leiloeiro.taxa_comissao)) comFipe++;
+            if (await aplicarFipeEScore(loteId, l, leiloeiro.taxa_comissao, codigoFipeAnterior)) comFipe++;
           } catch (e) {
             console.warn(`[normalizer] FIPE falhou p/ lote ${l.externalId}:`, (e as Error).message);
           }
