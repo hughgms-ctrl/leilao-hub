@@ -12,6 +12,10 @@ on:
         description: 'Rodar só o normalize (não bate no site do leiloeiro)'
         type: boolean
         default: false
+      fontes:
+        description: 'Coletar só estes leiloeiros (separados por vírgula). Vazio = todos.'
+        type: string
+        default: ''
 
   schedule:
     - cron: '0 */6 * * *'   # a cada 6h — ver aviso acima
@@ -62,6 +66,8 @@ jobs:
 
       - name: Scrape
         if: ${{ !inputs.pular_scrape }}
+        env:
+          FONTES: ${{ inputs.fontes }}
         run: npm run scrape
 
       - name: Normalize

@@ -26,7 +26,49 @@ const PAGE_SIZE = 50;
 const DELAY_MS = 2000;
 const CATEGORIA_VEICULOS = 1;
 const USER_AGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+/** Cabeçalhos de browser de verdade: o WAF (GoCache) olha mais que o UA. */
+const HEADERS_BROWSER: Record<string, string> = {
+  'User-Agent': USER_AGENT,
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+  'Sec-Fetch-Dest': 'empty',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Site': 'same-origin',
+};
+
+/**
+ * fetch com retry.
+ *
+ * No GitHub Actions a primeira tentativa morreu com "fetch failed" — erro
+ * de conexão, sem status HTTP, provavelmente o WAF cortando IP de
+ * datacenter. O erro cru do fetch não diz nada; aqui a causa real é
+ * propagada para o log e a chamada é repetida com espera.
+ */
+async function fetchComRetry(url: string, headers: Record<string, string>, tentativas = 3): Promise<Response> {
+  let ultimo: unknown;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      return await fetch(url, { headers, redirect: 'follow' });
+    } catch (e) {
+      ultimo = e;
+      const causa = (e as { cause?: { code?: string; message?: string } }).cause;
+      console.warn(
+        `[freitas-leiloeiro] tentativa ${i}/${tentativas} falhou: ${(e as Error).message}` +
+        (causa ? ` | causa: ${causa.code ?? ''} ${causa.message ?? ''}` : ''),
+      );
+      if (i < tentativas) await sleep(3000 * i);
+    }
+  }
+  const c = (ultimo as { cause?: { code?: string; message?: string } })?.cause;
+  throw new Error(
+    `conexão falhou após ${tentativas} tentativas: ${(ultimo as Error)?.message}` +
+    (c ? ` | causa: ${c.code ?? ''} ${c.message ?? ''}` : ''),
+  );
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -58,9 +100,10 @@ export class FreitasAdapter {
    * conhecer o total esperado por tipo.
    */
   async fetchTipos(): Promise<{ subTipoId: number; nome: string; quantidade: number }[]> {
-    const res = await fetch(`${BASE_URL}/Leiloes/PesquisarLotesTipos?categoria=${CATEGORIA_VEICULOS}`, {
-      headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
-    });
+    const res = await fetchComRetry(
+      `${BASE_URL}/Leiloes/PesquisarLotesTipos?categoria=${CATEGORIA_VEICULOS}`,
+      { ...HEADERS_BROWSER, Accept: 'application/json' },
+    );
     if (!res.ok) throw new Error(`PesquisarLotesTipos: HTTP ${res.status}`);
     return (await res.json()) as { subTipoId: number; nome: string; quantidade: number }[];
   }
@@ -79,8 +122,9 @@ export class FreitasAdapter {
 
   /** Uma página de cards já extraída para objetos. */
   async fetchPagina(page: number, size = PAGE_SIZE, tipoLoteId = 0, tipoNome = ''): Promise<FreitasRawLot[]> {
-    const res = await fetch(this.url(page, size, tipoLoteId), {
-      headers: { Accept: 'text/html', 'User-Agent': USER_AGENT, Referer: `${BASE_URL}/Leiloes/Pesquisar?query=&categoria=1` },
+    const res = await fetchComRetry(this.url(page, size, tipoLoteId), {
+      ...HEADERS_BROWSER,
+      Referer: `${BASE_URL}/Leiloes/Pesquisar?query=&categoria=1`,
     });
     if (!res.ok) throw new Error(`PesquisarLotes p${page}: HTTP ${res.status}`);
     const html = await res.text();
