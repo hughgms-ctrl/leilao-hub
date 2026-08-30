@@ -12,6 +12,19 @@ export const CONDICAO_MULTIPLIER: Record<string, number> = {
   // 'grande monta' / 'sucata' → sem score (não volta a circular): tratado no código
 };
 
+/**
+ * Multiplicador quando o leiloeiro NÃO informa a condição do lote.
+ *
+ * A Freitas não publica monta/sinistro em lugar nenhum da listagem. Sem um
+ * default esses lotes ficariam todos sem score — invisíveis no ranking.
+ * 0.70 fica entre 'pequena monta' (0.82) e 'média monta' (0.45): assume que
+ * o lote médio de leilão tem algum dano, sem fingir que é sucata.
+ *
+ * ATENÇÃO: isto vale só para condição AUSENTE. Condição informada mas fora
+ * da tabela (sucata, grande monta) continua sem score, de propósito.
+ */
+export const MULTIPLICADOR_CONDICAO_AUSENTE = 0.70;
+
 /** Origens que reduzem risco/burocracia (leve bônus) ou aumentam (penalidade). */
 export const ORIGEM_ADJUST: Record<string, number> = {
   frota: 0.02,      // doc geralmente ok, manutenção de frota

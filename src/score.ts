@@ -1,6 +1,6 @@
 import {
   CONDICAO_MULTIPLIER, ORIGEM_ADJUST, TAXAS_FIXAS_ESTIMADAS, COMISSAO_DEFAULT,
-  LANCE_MIN_RATIO_FIPE, STATUS_PONTUAVEIS,
+  LANCE_MIN_RATIO_FIPE, STATUS_PONTUAVEIS, MULTIPLICADOR_CONDICAO_AUSENTE,
 } from './config';
 
 /**
@@ -56,8 +56,14 @@ export function calcularScore(i: ScoreInput): ScoreResult | null {
   const lanceRef = lanceReferencia(i.lanceInicial, i.lanceAtual);
   if (lanceRef === null) return null;
 
-  const mult = i.condicao ? CONDICAO_MULTIPLIER[i.condicao.toLowerCase().trim()] : 1.0;
-  if (mult === undefined) return null; // condição desconhecida/sucata: sem score
+  // Condição AUSENTE (leiloeiro não publica) usa o default calibrado.
+  // Antes isto caía em 1.0, tratando lote sem informação como se fosse
+  // "sem sinistro" — inflava o score de toda fonte que não publica monta.
+  const mult = i.condicao
+    ? CONDICAO_MULTIPLIER[i.condicao.toLowerCase().trim()]
+    : MULTIPLICADOR_CONDICAO_AUSENTE;
+  // condição informada mas fora da tabela (sucata, grande monta): sem score
+  if (mult === undefined) return null;
 
   const origemAdj = i.origem
     ? (ORIGEM_ADJUST[i.origem.toLowerCase().trim()] ?? 0)

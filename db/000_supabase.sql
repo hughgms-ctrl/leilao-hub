@@ -228,5 +228,7 @@ CREATE TABLE IF NOT EXISTS alertas (
 -- saveRawScrape faz "INSERT ... SELECT id FROM leiloeiros WHERE slug = $1",
 -- que simplesmente não insere nada quando o leiloeiro não existe.
 INSERT INTO leiloeiros (slug, nome, site_url, taxa_comissao)
-VALUES ('sodre-santoro', 'Sodré Santoro', 'https://www.sodresantoro.com.br', 0.05)
+VALUES
+  ('sodre-santoro',     'Sodré Santoro',     'https://www.sodresantoro.com.br',     0.05),
+  ('freitas-leiloeiro', 'Freitas Leiloeiro', 'https://www.freitasleiloeiro.com.br', 0.05)
 ON CONFLICT (slug) DO NOTHING;

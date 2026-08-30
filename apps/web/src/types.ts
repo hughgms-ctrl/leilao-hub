@@ -26,6 +26,8 @@ export interface Lote {
   pagina_url: string | null;
   imagens: string[] | null;
   financiavel: boolean | null;
+  leiloeiro: string | null;
+  leiloeiro_slug: string | null;
 }
 
 export interface ListaResposta {
@@ -54,6 +56,7 @@ export interface Stats {
   por_uf: GrupoStat[];
   por_condicao: GrupoStat[];
   por_origem: GrupoStat[];
+  por_leiloeiro: (GrupoStat & { nome: string })[];
   marcas: GrupoStat[];
 }
 

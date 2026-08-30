@@ -60,6 +60,12 @@ export function LoteCard({ lote }: { lote: Lote }) {
               <span>
                 {lote.ano_fabricacao ?? '—'}/{lote.ano_modelo ?? '—'}
               </span>
+              {lote.leiloeiro && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="truncate">{lote.leiloeiro}</span>
+                </>
+              )}
               {local && (
                 <>
                   <span aria-hidden>·</span>

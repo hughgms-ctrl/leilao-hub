@@ -25,6 +25,7 @@ export const listaLotesSchema = z.object({
   origem: str,
   status: str,
   marca: str,
+  leiloeiro: str,
   busca: str,
   score_tipo: z.enum(SCORE_TIPOS).optional(),
   // querystring nao tem boolean: aceita 'true'/'false' e converte

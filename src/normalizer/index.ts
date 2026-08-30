@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/sodre';
+import { mapFreitasDoc } from './mappers/freitas';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
 import { poolConfigDireto } from '../pg-config';
@@ -16,7 +17,23 @@ import { poolConfigDireto } from '../pg-config';
 
 const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'sodre-santoro': mapSodreDoc,
+  'freitas-leiloeiro': mapFreitasDoc,
 };
+
+/** URL da página do leilão, por leiloeiro. */
+function leilaoUrl(slug: string, externalId: string): string {
+  if (slug === 'freitas-leiloeiro') {
+    return `https://www.freitasleiloeiro.com.br/Leiloes/Lotes?leilaoId=${externalId}`;
+  }
+  return `https://www.sodresantoro.com.br/leilao/${externalId}`;
+}
+
+/** "31/08/2026" + "10:00" -> ISO, para as fontes que só dão data BR. */
+function dataBrParaIso(data?: string, hora?: string): string | null {
+  const m = (data ?? '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}T${(hora ?? '00:00').padStart(5, '0')}:00`;
+}
 
 const pool = new Pool(poolConfigDireto());
 
@@ -54,7 +71,11 @@ async function upsertLeilao(
   leiloeiroId: number,
   auctionExternalId: string,
   doc: Record<string, any>,
+  slug: string,
 ): Promise<number> {
+  // Sodré traz os campos do leilão no próprio documento do lote; Freitas
+  // só publica data e hora no card. Lemos os dois vocabulários.
+  const dataInicio = doc.auction_date_init || dataBrParaIso(doc.dataLeilao, doc.horaLeilao);
   const r = await pool.query(
     `INSERT INTO leiloes (
        leiloeiro_id, external_id, titulo, pagina_url,
@@ -72,8 +93,8 @@ async function upsertLeilao(
       leiloeiroId,
       auctionExternalId,
       doc.auction_name ? String(doc.auction_name) : `Leilão ${auctionExternalId}`,
-      `https://www.sodresantoro.com.br/leilao/${auctionExternalId}`,
-      doc.auction_date_init || null,
+      leilaoUrl(slug, auctionExternalId),
+      dataInicio || null,
       doc.auction_date_end || null,
       mapStatusLeilao(doc.auction_status),
       doc.client_name ? String(doc.client_name) : null,
@@ -338,7 +359,7 @@ export async function processarPendentes(): Promise<void> {
         const l = mapper(doc);
         if (!l) continue;
 
-        const leilaoId = await upsertLeilao(leiloeiro.id, l.auctionExternalId, doc);
+        const leilaoId = await upsertLeilao(leiloeiro.id, l.auctionExternalId, doc, row.slug);
         const { id: loteId, lanceAnterior } = await upsertLote(
           leiloeiro.id, leilaoId, row.id, l,
         );

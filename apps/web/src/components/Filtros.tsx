@@ -80,7 +80,8 @@ export function Filtros({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Combo rotulo="Leiloeiro" chave="leiloeiro" valores={(stats?.por_leiloeiro ?? []).map((l) => ({ valor: l.valor, total: l.total }))} filtros={filtros} aoMudar={setFiltro} />
         <Combo rotulo="Tipo" chave="tipo" valores={stats?.por_tipo ?? []} filtros={filtros} aoMudar={setFiltro} />
         <Combo rotulo="UF" chave="uf" valores={stats?.por_uf ?? []} filtros={filtros} aoMudar={setFiltro} />
         <Combo rotulo="Condição" chave="condicao" valores={stats?.por_condicao ?? []} filtros={filtros} aoMudar={setFiltro} />

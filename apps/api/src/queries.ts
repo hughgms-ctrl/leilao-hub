@@ -28,6 +28,7 @@ function montarFiltros(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   if (q.origem) add('lower(l.origem) = lower(?)', q.origem);
   if (q.status) add('l.status::text = lower(?)', q.status);
   if (q.marca) add('lower(l.marca) = lower(?)', q.marca);
+  if (q.leiloeiro) add('lo.slug = ?', q.leiloeiro);
 
   if (q.busca) {
     add(
@@ -60,6 +61,7 @@ const COLUNAS_ITEM = `
   l.custo_estimado_total, l.score_oportunidade, l.score_tipo,
   l.fipe_match_score, l.codigo_fipe, fp.preco AS fipe_preco,
   l.financiavel,
+  lo.slug AS leiloeiro_slug, lo.nome AS leiloeiro,
   l.pagina_url, img.urls AS imagens`;
 
 export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
@@ -71,6 +73,7 @@ export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   const sql = `
     SELECT ${COLUNAS_ITEM}
     FROM lotes l
+    JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
     LEFT JOIN fipe_precos fp ON fp.id = l.fipe_preco_id
     LEFT JOIN LATERAL (
       -- ate 8 fotos por lote, na ordem, para o carrossel do card.
@@ -86,7 +89,8 @@ export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
     ORDER BY ${col} ${dir} NULLS LAST, l.id ASC
     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
 
-  const countSql = `SELECT count(*)::int AS total FROM lotes l ${clause}`;
+  const countSql = `SELECT count(*)::int AS total FROM lotes l
+    JOIN leiloeiros lo ON lo.id = l.leiloeiro_id ${clause}`;
 
   const [itens, total] = await Promise.all([
     pool.query(sql, [...params, q.per_page, offset]),
@@ -117,9 +121,9 @@ export async function buscarLote(id: number) {
             fp.marca AS fipe_marca, fp.modelo AS fipe_modelo,
             fp.mes_referencia AS fipe_mes_referencia
      FROM lotes l
+     JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
      LEFT JOIN fipe_precos fp ON fp.id = l.fipe_preco_id
      LEFT JOIN leiloes le ON le.id = l.leilao_id
-     LEFT JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
      LEFT JOIN LATERAL (
        SELECT array_agg(f.url ORDER BY f.ordem) AS urls
        FROM (
@@ -173,6 +177,15 @@ export async function estatisticas() {
       )
     ).rows;
 
+  const porLeiloeiro = (
+    await pool.query(
+      `SELECT lo.slug AS valor, lo.nome, count(*)::int AS total,
+              count(l.score_oportunidade)::int AS com_score
+       FROM lotes l JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
+       GROUP BY lo.slug, lo.nome ORDER BY total DESC`,
+    )
+  ).rows;
+
   const [porTipo, porUf, porCondicao, porOrigem, marcas] = await Promise.all([
     porGrupo('tipo'),
     porGrupo('uf'),
@@ -188,6 +201,7 @@ export async function estatisticas() {
     por_uf: porUf,
     por_condicao: porCondicao,
     por_origem: porOrigem,
+    por_leiloeiro: porLeiloeiro,
     marcas,
   };
 }

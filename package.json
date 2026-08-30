@@ -10,6 +10,7 @@
     "verify": "tsx src/verificar-scrape.ts"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "pg": "^8.12.0",
     "playwright": "^1.46.0"
   },

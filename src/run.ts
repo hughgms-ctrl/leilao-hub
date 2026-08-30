@@ -1,73 +1,89 @@
 import { SodreSantoroApiAdapter } from './adapters/sodre-santoro-api';
+import { FreitasAdapter } from './adapters/freitas';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
 /**
- * Runner v3 — funciona com ou sem banco.
- *   Sem DIRECT_DATABASE_URL: só coleta e imprime amostras (modo exploração).
- *   Com DIRECT_DATABASE_URL: também salva no staging raw_scrapes.
+ * Runner: coleta de TODOS os leiloeiros, um por vez.
  *
- * Usa a conexão DIRETA (5432), não o pooler: é processo longo, com
- * INSERT de payload grande. O pooler (6543) é da API.
+ * Sequencial de propósito — cada adapter tem seu próprio rate limit e
+ * paralelizar só aumentaria a chance de bloqueio, sem ganho real (o
+ * gargalo do pipeline é o normalize, não a coleta).
  *
- * Uso:
- *   npx tsx src/run.ts                                     # exploração
- *   DIRECT_DATABASE_URL=postgres://... npx tsx src/run.ts  # completo
+ * Uma fonte que falha NÃO derruba as outras: o erro é registrado e o
+ * runner segue. Só sai com código 1 se todas falharem.
+ *
+ * Sem DIRECT_DATABASE_URL roda em modo exploração (coleta e imprime).
  */
-async function main() {
-  const adapter = new SodreSantoroApiAdapter();
-  const hasDb = Boolean(connectionStringDireta());
-  const startedAt = Date.now();
 
-  try {
-    // Modo amostra: bootstrap + dump da 1a pagina em sample-response.json.
-    // Serve para iterar no parser offline, sem re-scrapear o site.
-    if (process.env.SAMPLE_ONLY) {
-      console.log(`[${adapter.slug}] SAMPLE_ONLY — capturando 1a pagina...`);
-      await adapter.dumpSample();
-      return;
+async function coletarSodre(hasDb: boolean): Promise<number> {
+  const a = new SodreSantoroApiAdapter();
+  console.log(`\n[${a.slug}] bootstrap (cookies Azion via Playwright)...`);
+  await a.bootstrap();
+
+  console.log(`[${a.slug}] paginando /api/search-lots...`);
+  const { raw } = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${raw.length} lotes coletados`);
+
+  console.log(`[${a.slug}] coletando detalhe dos leilões...`);
+  const leiloes = await a.fetchAuctions(raw);
+  console.log(`[${a.slug}] ${leiloes.length} leilões detalhados`);
+
+  if (hasDb) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: raw }, 'api/search-lots');
+    if (leiloes.length) {
+      await saveRawScrape(a.slug, 'auction_list', { results: leiloes }, 'api/auctions');
     }
-
-    console.log(`[${adapter.slug}] bootstrap (cookies Azion via Playwright)...`);
-    await adapter.bootstrap();
-
-    console.log(`[${adapter.slug}] paginando /api/search-lots...`);
-    const { raw, parsed } = await adapter.fetchAllLots();
-    console.log(`[${adapter.slug}] ${raw.length} lotes coletados`);
-
-    // Segunda coleta, no MESMO run (aproveita os cookies do bootstrap):
-    // detalhe dos leilões ativos referenciados pelos lotes.
-    console.log(`[${adapter.slug}] coletando detalhe dos leilões...`);
-    const leiloes = await adapter.fetchAuctions(raw);
-    console.log(`[${adapter.slug}] ${leiloes.length} leilões detalhados`);
-
-    if (hasDb) {
-      await saveRawScrape(adapter.slug, 'lot_detail', { results: raw }, 'api/search-lots');
-      if (leiloes.length) {
-        await saveRawScrape(adapter.slug, 'auction_list', { results: leiloes }, 'api/auctions');
-      }
-      console.log(`[${adapter.slug}] salvo em raw_scrapes`);
-    } else {
-      console.log(`[${adapter.slug}] DIRECT_DATABASE_URL ausente — pulando gravação (modo exploração)`);
-    }
-
-    console.log('\n=== AMOSTRA: 1º lote BRUTO (formato real da API) ===');
-    console.log(JSON.stringify(raw[0], null, 2));
-    console.log('\n=== AMOSTRA: 3 lotes MAPEADOS (como nosso parser entendeu) ===');
-    parsed.slice(0, 3).forEach((lote, i) => {
-      console.log(`--- lote ${i + 1} ---`);
-      console.log(JSON.stringify(lote, null, 2));
-    });
-
-    console.log(
-      `\n[${adapter.slug}] concluído em ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
-    );
-  } catch (err) {
-    console.error(`[${adapter.slug}] falhou:`, err);
-    process.exitCode = 1;
-  } finally {
-    if (hasDb) await closePool();
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
   }
+  return raw.length;
+}
+
+async function coletarFreitas(hasDb: boolean): Promise<number> {
+  const a = new FreitasAdapter();
+  console.log(`\n[${a.slug}] paginando /Leiloes/PesquisarLotes (HTML)...`);
+  const lotes = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'Leiloes/PesquisarLotes');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
+const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
+  'sodre-santoro': coletarSodre,
+  'freitas-leiloeiro': coletarFreitas,
+};
+
+async function main() {
+  const hasDb = Boolean(connectionStringDireta());
+  const inicio = Date.now();
+  if (!hasDb) console.log('DIRECT_DATABASE_URL ausente — modo exploração, nada será gravado');
+
+  // FONTES=freitas-leiloeiro npm run scrape roda só uma
+  const filtro = (process.env.FONTES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const alvos = Object.keys(FONTES).filter((s) => !filtro.length || filtro.includes(s));
+
+  const resultados: { slug: string; lotes?: number; erro?: string }[] = [];
+  for (const slug of alvos) {
+    try {
+      resultados.push({ slug, lotes: await FONTES[slug](hasDb) });
+    } catch (e) {
+      console.error(`[${slug}] FALHOU:`, (e as Error).message);
+      resultados.push({ slug, erro: (e as Error).message });
+    }
+  }
+
+  console.log('\n=== RESUMO ===');
+  for (const r of resultados) {
+    console.log(`  ${r.slug}: ${r.erro ? `ERRO — ${r.erro}` : `${r.lotes} lotes`}`);
+  }
+  console.log(`concluído em ${((Date.now() - inicio) / 1000).toFixed(1)}s`);
+
+  if (resultados.every((r) => r.erro)) process.exitCode = 1;
+  if (hasDb) await closePool();
 }
 
 main();
