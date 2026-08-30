@@ -10,7 +10,18 @@ import { poolConfigDireto, connectionStringDireta } from './pg-config';
  *
  * Nunca imprime a connection string.
  */
-const JANELA_MIN = Number(process.env.JANELA_VERIFICACAO_MIN ?? 30);
+/**
+ * Janela larga de propósito. Medido no primeiro run real do Actions: o
+ * normalize levou ~32 min (cada query é um round-trip até a Supabase em
+ * sa-east-1), e com janela de 30 min a checagem enxergou só 625 dos 701
+ * lotes — os primeiros já tinham saído da janela. Se o normalize ficar
+ * mais lento, 30 min viraria FALSO VERMELHO.
+ *
+ * Alargar não enfraquece o teste: bloqueio de verdade significa ZERO lote
+ * atualizado, e os runs ficam 6 h distantes entre si, então a janela nunca
+ * pega o trabalho da execução anterior.
+ */
+const JANELA_MIN = Number(process.env.JANELA_VERIFICACAO_MIN ?? 120);
 
 async function main() {
   if (!connectionStringDireta()) {
