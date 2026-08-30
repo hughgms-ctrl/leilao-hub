@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { CarrosselFotos } from '@/components/CarrosselFotos';
 import { brl, pct, titulo, cn } from '@/lib/utils';
 import type { Lote } from '@/types';
-import { ExternalLink, Gauge, MapPin, TriangleAlert, BadgeCheck } from 'lucide-react';
+import { ExternalLink, Gauge, MapPin, TriangleAlert, BadgeCheck, Scale } from 'lucide-react';
 
 /** verde > 0.4 | amarelo 0.2–0.4 | neutro < 0.2 */
 function faixaScore(score: number) {
@@ -82,6 +82,12 @@ export function LoteCard({ lote }: { lote: Lote }) {
             {lote.financiavel && (
               <Badge variant="default" className="gap-1">
                 <BadgeCheck className="h-3 w-3" /> Financiável
+              </Badge>
+            )}
+            {lote.permite_parcelamento && (
+              <Badge variant="default" className="gap-1 bg-indigo-600 hover:bg-indigo-600/90" title={`Leilão judicial com proposta de pagamento parcelado (art. 895 do CPC): ${lote.parcelamento_entrada_pct ?? 25}% de sinal + até ${lote.parcelamento_parcelas_max ?? 30} parcelas`}>
+                <Scale className="h-3 w-3" />
+                {Number(lote.parcelamento_entrada_pct ?? 25)}% + {lote.parcelamento_parcelas_max ?? 30}x
               </Badge>
             )}
             {especulativo && (

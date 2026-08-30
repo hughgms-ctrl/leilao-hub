@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS leiloes (
   -- que fala de pagamento. Não há URL de edital em PDF em nenhum payload.
   condicoes_venda     TEXT,
   condicoes_pagamento TEXT,
+  -- parcelamento do art. 895 do CPC (migração 005): sinal + parcelas
+  -- mensais garantidas pelo bem. Vale por LEILÃO — o juízo pode exigir
+  -- pagamento à vista, e vários editais exigem.
+  permite_parcelamento      BOOLEAN,
+  parcelamento_entrada_pct  NUMERIC(5,2),
+  parcelamento_parcelas_max SMALLINT,
+  parcelamento_trecho       TEXT,
   leiloeiro_nome      TEXT,
   jucesp              TEXT,
   is_judicial         BOOLEAN,
@@ -145,6 +152,8 @@ CREATE INDEX IF NOT EXISTS idx_lotes_score_tipo
   ON lotes (score_tipo, score_oportunidade DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_lotes_financiavel
   ON lotes (financiavel) WHERE financiavel = true;
+CREATE INDEX IF NOT EXISTS idx_leiloes_parcelamento
+  ON leiloes (permite_parcelamento) WHERE permite_parcelamento = true;
 
 -- ---------- IMAGENS ----------
 CREATE TABLE IF NOT EXISTS lote_imagens (

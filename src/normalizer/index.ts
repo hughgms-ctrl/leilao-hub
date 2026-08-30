@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/sodre';
 import { mapFreitasDoc } from './mappers/freitas';
+import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
 import { poolConfigDireto } from '../pg-config';
@@ -298,12 +299,18 @@ async function processarLeiloes(
   for (const doc of docs) {
     const a = mapSodreAuction(doc);
     if (!a) continue;
+    // art. 895 do CPC: 25% de sinal + saldo em até 30 parcelas. Vale por
+    // leilão, não por leiloeiro — o juízo pode exigir pagamento à vista.
+    const parc = detectarParcelamento(a.condicoesVenda);
     await pool.query(
       `INSERT INTO leiloes (
          leiloeiro_id, external_id, titulo, pagina_url, modalidade,
          data_inicio, cidade, comitente, edital_pdf_url,
-         condicoes_venda, condicoes_pagamento, leiloeiro_nome, jucesp, is_judicial
-       ) VALUES ($1,$2,$3,$4,$5::modalidade_leilao,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         condicoes_venda, condicoes_pagamento, leiloeiro_nome, jucesp, is_judicial,
+         permite_parcelamento, parcelamento_entrada_pct, parcelamento_parcelas_max,
+         parcelamento_trecho
+       ) VALUES ($1,$2,$3,$4,$5::modalidade_leilao,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+         $15,$16,$17,$18)
        ON CONFLICT (leiloeiro_id, external_id) DO UPDATE SET
          titulo              = COALESCE(EXCLUDED.titulo, leiloes.titulo),
          modalidade          = EXCLUDED.modalidade,
@@ -316,6 +323,10 @@ async function processarLeiloes(
          leiloeiro_nome      = COALESCE(EXCLUDED.leiloeiro_nome, leiloes.leiloeiro_nome),
          jucesp              = COALESCE(EXCLUDED.jucesp, leiloes.jucesp),
          is_judicial         = COALESCE(EXCLUDED.is_judicial, leiloes.is_judicial),
+         permite_parcelamento      = EXCLUDED.permite_parcelamento,
+         parcelamento_entrada_pct  = EXCLUDED.parcelamento_entrada_pct,
+         parcelamento_parcelas_max = EXCLUDED.parcelamento_parcelas_max,
+         parcelamento_trecho       = EXCLUDED.parcelamento_trecho,
          updated_at          = now()`,
       [
         leiloeiroId, a.externalId, a.titulo ?? null,
@@ -324,6 +335,8 @@ async function processarLeiloes(
         a.dataInicio ?? null, a.cidade ?? null, a.comitente ?? null,
         a.editalPdfUrl ?? null, a.condicoesVenda ?? null, a.condicoesPagamento ?? null,
         a.leiloeiroNome ?? null, a.jucesp ?? null, a.isJudicial ?? null,
+        parc.permite, parc.entradaPct ?? null, parc.parcelasMax ?? null,
+        parc.trecho ?? null,
       ],
     );
     ok++;

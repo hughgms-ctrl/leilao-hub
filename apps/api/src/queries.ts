@@ -29,6 +29,9 @@ function montarFiltros(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   if (q.status) add('l.status::text = lower(?)', q.status);
   if (q.marca) add('lower(l.marca) = lower(?)', q.marca);
   if (q.leiloeiro) add('lo.slug = ?', q.leiloeiro);
+  // parcelamento do art. 895 é propriedade do LEILÃO, não do lote
+  if (q.parcelamento) add('le.permite_parcelamento IS NOT DISTINCT FROM ?', q.parcelamento === 'true');
+  if (q.judicial) add('le.is_judicial IS NOT DISTINCT FROM ?', q.judicial === 'true');
 
   if (q.busca) {
     add(
@@ -62,6 +65,8 @@ const COLUNAS_ITEM = `
   l.fipe_match_score, l.codigo_fipe, fp.preco AS fipe_preco,
   l.financiavel,
   lo.slug AS leiloeiro_slug, lo.nome AS leiloeiro,
+  le.permite_parcelamento, le.parcelamento_entrada_pct, le.parcelamento_parcelas_max,
+  le.is_judicial,
   l.pagina_url, img.urls AS imagens`;
 
 export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
@@ -74,6 +79,7 @@ export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
     SELECT ${COLUNAS_ITEM}
     FROM lotes l
     JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
+    LEFT JOIN leiloes le ON le.id = l.leilao_id
     LEFT JOIN fipe_precos fp ON fp.id = l.fipe_preco_id
     LEFT JOIN LATERAL (
       -- ate 8 fotos por lote, na ordem, para o carrossel do card.
@@ -90,7 +96,8 @@ export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
 
   const countSql = `SELECT count(*)::int AS total FROM lotes l
-    JOIN leiloeiros lo ON lo.id = l.leiloeiro_id ${clause}`;
+    JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
+    LEFT JOIN leiloes le ON le.id = l.leilao_id ${clause}`;
 
   const [itens, total] = await Promise.all([
     pool.query(sql, [...params, q.per_page, offset]),
@@ -116,6 +123,8 @@ export async function buscarLote(id: number) {
             le.modalidade, le.cidade AS leilao_cidade, le.status AS leilao_status,
             le.edital_pdf_url, le.condicoes_pagamento, le.leiloeiro_nome AS leilao_leiloeiro,
             le.jucesp, le.is_judicial,
+            le.permite_parcelamento, le.parcelamento_entrada_pct,
+            le.parcelamento_parcelas_max, le.parcelamento_trecho,
             lo.slug AS leiloeiro_slug, lo.nome AS leiloeiro_nome,
             lo.taxa_comissao,
             fp.marca AS fipe_marca, fp.modelo AS fipe_modelo,
@@ -164,6 +173,10 @@ export async function estatisticas() {
            count(*) FILTER (WHERE score_tipo = 'confirmado')::int AS confirmados,
            count(*) FILTER (WHERE score_tipo = 'especulativo')::int AS especulativos,
            count(*) FILTER (WHERE financiavel)::int AS financiaveis,
+           (SELECT count(*)::int FROM lotes x JOIN leiloes y ON y.id = x.leilao_id
+             WHERE y.permite_parcelamento) AS parcelaveis,
+           (SELECT count(*)::int FROM lotes x JOIN leiloes y ON y.id = x.leilao_id
+             WHERE y.is_judicial) AS judiciais,
            round(avg(score_oportunidade), 4) AS score_medio
     FROM lotes`);
 

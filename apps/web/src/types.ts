@@ -28,6 +28,10 @@ export interface Lote {
   financiavel: boolean | null;
   leiloeiro: string | null;
   leiloeiro_slug: string | null;
+  permite_parcelamento: boolean | null;
+  parcelamento_entrada_pct: string | null;
+  parcelamento_parcelas_max: number | null;
+  is_judicial: boolean | null;
 }
 
 export interface ListaResposta {
@@ -51,6 +55,8 @@ export interface Stats {
   confirmados: number;
   especulativos: number;
   financiaveis: number;
+  parcelaveis: number;
+  judiciais: number;
   score_medio: number | null;
   por_tipo: GrupoStat[];
   por_uf: GrupoStat[];
@@ -96,5 +102,6 @@ export interface LoteDetalhe extends Lote {
   fipe_modelo: string | null;
   fipe_mes_referencia: string | null;
 
+  parcelamento_trecho: string | null;
   historico_lances: LanceHistorico[];
 }

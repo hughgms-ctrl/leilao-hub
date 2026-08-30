@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { titulo } from '@/lib/utils';
 import type { Stats } from '@/types';
 import type { Filtros as FiltrosMap } from '@/hooks';
-import { Search, X, BadgeCheck } from 'lucide-react';
+import { Search, X, BadgeCheck, Scale } from 'lucide-react';
 
 const TODOS = '__todos__';
 
@@ -129,6 +129,16 @@ export function Filtros({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={filtros.parcelamento === 'true' ? 'default' : 'outline'}
+          onClick={() => setFiltro('parcelamento', filtros.parcelamento === 'true' ? '' : 'true')}
+          title="Leilão judicial que aceita proposta de pagamento parcelado (art. 895 do CPC): sinal + parcelas mensais, sem financiamento bancário"
+        >
+          <Scale className="mr-1 h-4 w-4" />
+          Parcelável (25% + 30x)
+          {stats ? ` (${stats.parcelaveis})` : ''}
+        </Button>
         <Button
           size="sm"
           variant={filtros.financiavel === 'true' ? 'default' : 'outline'}
