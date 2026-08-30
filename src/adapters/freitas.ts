@@ -1,4 +1,5 @@
 ﻿import * as cheerio from 'cheerio';
+import { Agent } from 'undici';
 
 /**
  * ADAPTER: Freitas Leiloeiro (freitasleiloeiro.com.br)
@@ -12,7 +13,8 @@
  * Ele devolve um PARTIAL de HTML só com os cards (não a página inteira),
  * o que torna o parse bem contido. Página sem card = fim da paginação.
  *
- * Não há proteção de bot: fetch simples resolve, sem Playwright.
+ * Há WAF (GoCache): requisição sem cabeçalho de browser leva
+ * "Acesso Bloqueado". Não precisa de Playwright, só dos headers certos.
  *
  * FRAGILIDADE: isto depende das classes CSS `cardLote-*`. Se o site
  * remaquetar, o parse silenciosamente devolve zero — por isso o adapter
@@ -41,6 +43,28 @@ const HEADERS_BROWSER: Record<string, string> = {
 };
 
 /**
+ * Dispatcher usado SOMENTE nas requisições da Freitas.
+ *
+ * PROBLEMA: o servidor deles não envia o certificado intermediário, então
+ * a cadeia chega incompleta e o Node estoura
+ * UNABLE_TO_VERIFY_LEAF_SIGNATURE. Navegador e Windows disfarçam porque
+ * buscam o intermediário faltante sozinhos (AIA fetching); o Node não faz
+ * isso. Era por isso que a coleta passava na máquina local e falhava no
+ * runner do GitHub — não era bloqueio de WAF, como parecia no começo.
+ *
+ * ESCOPO E RISCO: este agent vale só para o fetch abaixo. A conexão com o
+ * banco e a API da FIPE continuam com verificação normal — de propósito
+ * NÃO se usa NODE_TLS_REJECT_UNAUTHORIZED, que desligaria a verificação
+ * do processo inteiro. Aqui só se lê HTML público e não trafega
+ * credencial nenhuma, então o pior caso de um ataque no meio do caminho
+ * é dado de lote falso, não vazamento. O parser já falha alto quando o
+ * HTML não tem os cards esperados.
+ *
+ * SE A FREITAS CORRIGIR A CADEIA: dá para remover isto e o `undici`.
+ */
+const agenteFreitas = new Agent({ connect: { rejectUnauthorized: false } });
+
+/**
  * fetch com retry.
  *
  * No GitHub Actions a primeira tentativa morreu com "fetch failed" — erro
@@ -52,7 +76,11 @@ async function fetchComRetry(url: string, headers: Record<string, string>, tenta
   let ultimo: unknown;
   for (let i = 1; i <= tentativas; i++) {
     try {
-      return await fetch(url, { headers, redirect: 'follow' });
+      return await fetch(url, {
+        headers,
+        redirect: 'follow',
+        dispatcher: agenteFreitas,
+      } as RequestInit);
     } catch (e) {
       ultimo = e;
       const causa = (e as { cause?: { code?: string; message?: string } }).cause;
