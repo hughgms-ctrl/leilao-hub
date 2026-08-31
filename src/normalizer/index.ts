@@ -3,6 +3,7 @@ import { mapSodreDoc, mapSodreAuction, mapStatus, type DbLot } from './mappers/s
 import { mapFreitasDoc } from './mappers/freitas';
 import { mapMegaDoc } from './mappers/mega';
 import { mapZukDoc } from './mappers/zuk';
+import { mapSuperbidDoc } from './mappers/superbid';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -23,6 +24,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'freitas-leiloeiro': mapFreitasDoc,
   'mega-leiloes': mapMegaDoc,
   'portal-zuk': mapZukDoc,
+  'superbid-judicial': mapSuperbidDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -32,6 +34,11 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   if (slug === 'mega-leiloes') {
     return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
+  }
+  if (slug === 'superbid-judicial') {
+    // slug ignorado pelo roteador — verificado: /evento/leilao-785151
+    // abre "1ª VARA CÍVEL DE PIRAPOZINHO/SP (2182-2008)"
+    return `https://www.canaljudicial.com.br/evento/leilao-${externalId}`;
   }
   if (slug === 'portal-zuk') {
     // O caminho diz "imoveis" e traz um slug descritivo, mas o roteador
@@ -108,6 +115,21 @@ async function upsertLeilao(
   // ele alimenta o leilão — inclusive a detecção do art. 895.
   const condicoes: string | undefined = doc.condicoes ? String(doc.condicoes) : undefined;
   const parc = detectarParcelamento(condicoes);
+
+  // O Superbid publica a condição comercial ESTRUTURADA (maxInstallments,
+  // minAdvanceRate) em vez de texto de edital. Quando ela vem, vale mais
+  // que o detector — é o número da fonte, não inferência nossa.
+  //
+  // `parcelamento_trecho` fica nulo de propósito: ele guarda citação
+  // LITERAL do leiloeiro, e aqui não existe texto para citar. Escrever
+  // uma frase nossa ali faria dado sintetizado passar por fonte.
+  const parcEstruturado =
+    doc.parcelamento && Number(doc.parcelamento.parcelas) > 0
+      ? {
+          parcelas: Number(doc.parcelamento.parcelas),
+          entradaPct: Number(doc.parcelamento.entradaPct) || null,
+        }
+      : null;
   // O Mega diz o tipo do leilão em texto. O Zuk não diz, mas publica o
   // nº do processo em 100% dos lotes — e processo só existe em leilão
   // judicial, então a presença dele é prova, não palpite.
@@ -149,10 +171,10 @@ async function upsertLeilao(
       doc.client_name ? String(doc.client_name) : null,
       condicoes ?? null,
       ehJudicial ?? null,
-      condicoes ? parc.permite : null,
-      parc.entradaPct ?? null,
-      parc.parcelasMax ?? null,
-      parc.trecho ?? null,
+      parcEstruturado ? true : condicoes ? parc.permite : null,
+      parcEstruturado ? parcEstruturado.entradaPct : parc.entradaPct ?? null,
+      parcEstruturado ? parcEstruturado.parcelas : parc.parcelasMax ?? null,
+      parcEstruturado ? null : parc.trecho ?? null,
     ],
   );
   cacheLeiloes.set(chave, r.rows[0].id);
