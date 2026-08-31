@@ -93,7 +93,11 @@ export class SuperbidAdapter {
     const q = new URLSearchParams({
       filter: FILTRO,
       locale: 'pt_BR',
-      orderBy: 'score:desc',
+      // `score:desc` (o padrão do site) NÃO é estável entre requisições:
+      // as páginas se sobrepõem e a deduplicação come lotes — a primeira
+      // coleta trouxe 215 de 299 assim. Ordenar por id resolve; medido:
+      // 299 coletados, 299 únicos.
+      orderBy: 'id:asc',
       pageNumber: String(pageNumber),
       pageSize: String(PAGE_SIZE),
       portalId: '[2,15]',
