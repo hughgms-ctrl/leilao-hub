@@ -4,6 +4,7 @@ import { mapFreitasDoc } from './mappers/freitas';
 import { mapMegaDoc } from './mappers/mega';
 import { mapZukDoc } from './mappers/zuk';
 import { mapSuperbidDoc } from './mappers/superbid';
+import { mapLeiloesJudiciaisDoc } from './mappers/leiloes-judiciais';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -25,6 +26,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'mega-leiloes': mapMegaDoc,
   'portal-zuk': mapZukDoc,
   'superbid-judicial': mapSuperbidDoc,
+  'leiloes-judiciais': mapLeiloesJudiciaisDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -34,6 +36,10 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   if (slug === 'mega-leiloes') {
     return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
+  }
+  if (slug === 'leiloes-judiciais') {
+    // verificado: /leilao/98172 abre "JUSTICA FEDERAL DE PORTO ALEGRE - 7a VARA"
+    return `https://www.leiloesjudiciais.com.br/leilao/${externalId}`;
   }
   if (slug === 'superbid-judicial') {
     // slug ignorado pelo roteador — verificado: /evento/leilao-785151

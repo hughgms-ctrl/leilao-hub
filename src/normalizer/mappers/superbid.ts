@@ -56,6 +56,13 @@ function acharAno(t: string): { anoFab?: number; anoModelo?: number } {
   if (par2) {
     return { anoFab: expandirAno(Number(par2[1])), anoModelo: expandirAno(Number(par2[2])) };
   }
+
+  // ano de 4 dígitos ocupando um campo inteiro ("Ford/Focus SE, 2016,
+  // Vermelho"). Exigir o campo inteiro evita pegar "320i" ou "92.112 Kg";
+  // a faixa plausível em parseShortDesc é a segunda barreira.
+  const solto = t.match(/(?:^|,)\s*(\d{4})\s*(?=,|$)/);
+  if (solto) return { anoFab: Number(solto[1]), anoModelo: Number(solto[1]) };
+
   return {};
 }
 
