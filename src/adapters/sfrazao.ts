@@ -51,11 +51,25 @@ export interface SfrazaoRawLot {
 const BASE = 'https://www.sfrazao.com.br';
 const DELAY_MS = 2000;
 
+/**
+ * A primeira coleta pelo GitHub Actions levou HTTP 403 enquanto a mesma
+ * requisição passava da máquina local. Cabeçalho completo de navegação
+ * (Sec-Fetch-*, Upgrade-Insecure-Requests) para descartar filtro por
+ * cabeçalho — se o 403 persistir, é bloqueio por IP de datacenter, e aí
+ * o caminho é outro.
+ */
 const HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'pt-BR,pt;q=0.9',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
