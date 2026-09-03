@@ -4,6 +4,7 @@ import { MegaAdapter } from './adapters/mega';
 import { ZukAdapter } from './adapters/zuk';
 import { SuperbidAdapter } from './adapters/superbid';
 import { LeiloesJudiciaisAdapter } from './adapters/leiloes-judiciais';
+import { SfrazaoAdapter } from './adapters/sfrazao';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -109,6 +110,19 @@ async function coletarLeiloesJudiciais(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+async function coletarSfrazao(hasDb: boolean): Promise<number> {
+  const a = new SfrazaoAdapter();
+  console.log(`\n[${a.slug}] varrendo leilao.php (HTML) — judicial e extrajudicial...`);
+  const lotes = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'leilao.php');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
@@ -116,6 +130,7 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'portal-zuk': coletarZuk,
   'superbid-judicial': coletarSuperbid,
   'leiloes-judiciais': coletarLeiloesJudiciais,
+  'sfrazao': coletarSfrazao,
 };
 
 async function main() {

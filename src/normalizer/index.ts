@@ -5,6 +5,7 @@ import { mapMegaDoc } from './mappers/mega';
 import { mapZukDoc } from './mappers/zuk';
 import { mapSuperbidDoc } from './mappers/superbid';
 import { mapLeiloesJudiciaisDoc } from './mappers/leiloes-judiciais';
+import { mapSfrazaoDoc } from './mappers/sfrazao';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -27,6 +28,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'portal-zuk': mapZukDoc,
   'superbid-judicial': mapSuperbidDoc,
   'leiloes-judiciais': mapLeiloesJudiciaisDoc,
+  'sfrazao': mapSfrazaoDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -36,6 +38,9 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   if (slug === 'mega-leiloes') {
     return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
+  }
+  if (slug === 'sfrazao') {
+    return `https://www.sfrazao.com.br/leilao.php?idLeilao=${externalId}`;
   }
   if (slug === 'leiloes-judiciais') {
     // verificado: /leilao/98172 abre "JUSTICA FEDERAL DE PORTO ALEGRE - 7a VARA"
@@ -78,6 +83,7 @@ const NOME_EXIBICAO: Record<string, string> = {
   'portal-zuk': 'Portal Zuk',
   'superbid-judicial': 'Canal Judicial',
   'leiloes-judiciais': 'Leilões Judiciais',
+  'sfrazao': 'S. Frazão',
 };
 
 async function ensureLeiloeiro(slug: string): Promise<Leiloeiro> {
