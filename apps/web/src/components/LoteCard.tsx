@@ -27,6 +27,13 @@ export function LoteCard({ lote }: { lote: Lote }) {
   const nome = `${titulo(lote.marca)} ${titulo(lote.modelo)}`.trim();
   const local = [titulo(lote.cidade), lote.uf].filter(Boolean).join('/');
 
+  // Quanto o lance está abaixo da FIPE. Só faz sentido com os dois lados
+  // e com lance MENOR — lote acima da tabela não ganha selo de desconto.
+  const fipe = lote.fipe_preco === null ? null : Number(lote.fipe_preco);
+  const lance = lote.lance_referencia === null ? null : Number(lote.lance_referencia);
+  const abatimento =
+    fipe && lance && fipe > 0 && lance < fipe ? (fipe - lance) / fipe : null;
+
   return (
     <Card className="group/card flex flex-col overflow-hidden transition-shadow hover:shadow-md">
       <div className="relative">
@@ -77,7 +84,12 @@ export function LoteCard({ lote }: { lote: Lote }) {
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {lote.condicao && <Badge variant="secondary">{titulo(lote.condicao)}</Badge>}
+            {/* "indefinida" é o default interno quando o leiloeiro não
+                informa condição — não diz nada a quem compra, e ocupava
+                espaço em quase todo card. */}
+            {lote.condicao && lote.condicao.toLowerCase() !== 'indefinida' && (
+              <Badge variant="secondary">{titulo(lote.condicao)}</Badge>
+            )}
             {lote.origem && <Badge variant="outline">{titulo(lote.origem)}</Badge>}
             {lote.financiavel && (
               <Badge variant="default" className="gap-1">
@@ -97,18 +109,38 @@ export function LoteCard({ lote }: { lote: Lote }) {
             )}
           </div>
 
-          <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">Lance ref.</dt>
-            <dd className="text-right font-medium tabular-nums">{brl(lote.lance_referencia)}</dd>
-            <dt className="text-muted-foreground">FIPE</dt>
-            <dd className="text-right tabular-nums">{brl(lote.fipe_preco)}</dd>
-            {lote.custo_estimado_total && (
-              <>
-                <dt className="text-muted-foreground">Custo est.</dt>
-                <dd className="text-right tabular-nums">{brl(lote.custo_estimado_total)}</dd>
-              </>
-            )}
-          </dl>
+          {/* A distância entre o lance e a FIPE é a razão de existir do
+              produto — e nenhum concorrente tem esse dado. Antes saía como
+              dois rótulos do mesmo tamanho, um embaixo do outro, e passava
+              batido. Agora o preço é o herói e o desconto é a legenda. */}
+          <div className="mt-auto space-y-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xl font-semibold tabular-nums tracking-tight">
+                {brl(lote.lance_referencia)}
+              </span>
+              {abatimento !== null && (
+                <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25">
+                  −{Math.round(abatimento * 100)}%
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {lote.fipe_preco ? (
+                <>
+                  FIPE <span className="tabular-nums">{brl(lote.fipe_preco)}</span>
+                </>
+              ) : (
+                'sem referência FIPE'
+              )}
+              {lote.custo_estimado_total && (
+                <>
+                  {' · custo est. '}
+                  <span className="tabular-nums">{brl(lote.custo_estimado_total)}</span>
+                </>
+              )}
+            </p>
+          </div>
         </CardContent>
       </Link>
 

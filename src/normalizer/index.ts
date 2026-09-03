@@ -67,13 +67,26 @@ const pool = new Pool(poolConfigDireto());
 
 interface Leiloeiro { id: number; taxa_comissao: number }
 
+/**
+ * Nome de exibição por leiloeiro. Sem isto o `nome` nascia igual ao slug
+ * e o card do site mostrava "leiloes-judiciais" para o usuário.
+ */
+const NOME_EXIBICAO: Record<string, string> = {
+  'sodre-santoro': 'Sodré Santoro',
+  'freitas-leiloeiro': 'Freitas Leiloeiro',
+  'mega-leiloes': 'Mega Leilões',
+  'portal-zuk': 'Portal Zuk',
+  'superbid-judicial': 'Canal Judicial',
+  'leiloes-judiciais': 'Leilões Judiciais',
+};
+
 async function ensureLeiloeiro(slug: string): Promise<Leiloeiro> {
   const r = await pool.query(
     `INSERT INTO leiloeiros (slug, nome, site_url)
-     VALUES ($1, $1, null)
-     ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+     VALUES ($1, $2, null)
+     ON CONFLICT (slug) DO UPDATE SET nome = EXCLUDED.nome
      RETURNING id, taxa_comissao`,
-    [slug],
+    [slug, NOME_EXIBICAO[slug] ?? slug],
   );
   return { id: r.rows[0].id, taxa_comissao: Number(r.rows[0].taxa_comissao) };
 }
