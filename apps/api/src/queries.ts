@@ -39,6 +39,17 @@ function montarFiltros(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   if (q.parcelamento) add('le.permite_parcelamento IS NOT DISTINCT FROM ?', q.parcelamento === 'true');
   if (q.judicial) add('le.is_judicial IS NOT DISTINCT FROM ?', q.judicial === 'true');
 
+  // Prazo para dar lance. `data_fim` guarda o PRÓXIMO encerramento ainda
+  // futuro (praça ou ciclo), não o último — ver dataFimDoDoc no
+  // normalizer. Leilão sem data fica de fora do filtro em vez de ser
+  // tratado como "sem prazo": só 307 dos 812 tinham data antes desta
+  // rodada, e assumir qualquer coisa daria resposta errada com cara de
+  // certa.
+  if (q.encerra_em !== undefined) {
+    add(`le.data_fim IS NOT NULL AND le.data_fim <= now() + (? || ' days')::interval`, q.encerra_em);
+    where.push('le.data_fim >= now()');
+  }
+
   if (q.busca) {
     add(
       `(coalesce(l.marca,'') || ' ' || coalesce(l.modelo,'') || ' ' || coalesce(l.descricao,'')) ILIKE ?`,

@@ -61,6 +61,50 @@ function leilaoUrl(slug: string, externalId: string): string {
   return `https://www.sodresantoro.com.br/leilao/${externalId}`;
 }
 
+/**
+ * Encerramento do leilão a partir do documento de lote.
+ *
+ * Existia um buraco: 505 dos 812 leilões estavam sem data_fim, incluindo
+ * TODOS os 331 do Leilões Judiciais e os 82 do Mega. Sem isso não dá para
+ * saber se um lote fecha amanhã ou fechou semana passada, e não dá para
+ * filtrar por prazo.
+ *
+ * As fontes já traziam a data; o normalizer é que a ignorava. Formatos:
+ *   Mega    "1ª Praça: 04/09/2026 às 10:30" / "2ª Praça: 25/09/2026 ..."
+ *   Zuk     "04/08/2026 às 14:06"           / "19/08/2026 às 14:06"
+ *   Freitas dataLeilao "04/09/2026" + horaLeilao "10:00"
+ *
+ * Vale o PRÓXIMO encerramento ainda no futuro, não o último: dizer que o
+ * prazo é o da 2ª praça quando a 1ª fecha em três dias faria perder o
+ * lote. Sem data futura, devolve a última — serve para saber que acabou.
+ */
+export function dataFimDoDoc(doc: Record<string, any>, agora = new Date()): string | null {
+  if (doc.auction_date_end) return String(doc.auction_date_end);
+
+  const brutas = [doc.praca1Data, doc.praca2Data]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0);
+
+  // Freitas publica só a data do pregão: é uma sessão única, então essa
+  // data é o próprio prazo final de lance.
+  if (!brutas.length && doc.dataLeilao) {
+    return dataBrParaIso(String(doc.dataLeilao), doc.horaLeilao ? String(doc.horaLeilao) : undefined);
+  }
+
+  const isos = brutas
+    .map((s) => {
+      const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s*(?:às|as)\s*(\d{1,2}):(\d{2}))?/);
+      if (!m) return null;
+      const hh = (m[4] ?? '00').padStart(2, '0');
+      return `${m[3]}-${m[2]}-${m[1]}T${hh}:${m[5] ?? '00'}:00`;
+    })
+    .filter((d): d is string => Boolean(d))
+    .sort();
+
+  if (!isos.length) return null;
+  const iso = agora.toISOString().slice(0, 19);
+  return isos.find((d) => d > iso) ?? isos[isos.length - 1];
+}
+
 /** "31/08/2026" + "10:00" -> ISO, para as fontes que só dão data BR. */
 function dataBrParaIso(data?: string, hora?: string): string | null {
   const m = (data ?? '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -191,7 +235,7 @@ async function upsertLeilao(
       doc.auction_name ? String(doc.auction_name) : `Leilão ${auctionExternalId}`,
       leilaoUrl(slug, auctionExternalId),
       dataInicio || null,
-      doc.auction_date_end || null,
+      dataFimDoDoc(doc),
       mapStatusLeilao(doc.auction_status ?? doc.status),
       doc.client_name ? String(doc.client_name) : null,
       condicoes ?? null,

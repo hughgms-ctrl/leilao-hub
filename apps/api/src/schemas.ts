@@ -32,6 +32,8 @@ export const listaLotesSchema = z.object({
   financiavel: z.enum(['true', 'false']).optional(),
   parcelamento: z.enum(['true', 'false']).optional(),
   judicial: z.enum(['true', 'false']).optional(),
+  /** lotes cujo leilao encerra nos proximos N dias (1..90) */
+  encerra_em: z.coerce.number().int().min(1).max(90).optional(),
   /** traz também lote que já saiu da fonte (padrão: só ativo) */
   incluir_encerrados: z.enum(['true', 'false']).optional(),
   order: z.enum(ORDER_COLS).optional().default('score'),

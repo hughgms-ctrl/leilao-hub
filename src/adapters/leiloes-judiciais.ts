@@ -36,6 +36,8 @@ export interface LjRawLot {
   paginaUrl: string;
   /** o acervo inteiro é judicial; o normalizer lê este campo */
   tipoLeilao: 'Judicial';
+  /** encerramento do leilão — vem da página do leilão, não do card */
+  auction_date_end?: string;
 }
 
 const BASE = 'https://www.leiloesjudiciais.com.br';
@@ -142,6 +144,53 @@ export class LeiloesJudiciaisAdapter {
     return out;
   }
 
+  /**
+   * Encerramento do leilão. O CARD não traz data nenhuma — sem isto os
+   * 2.123 lotes desta fonte entram sem prazo, e não dá para saber se um
+   * lote fecha amanhã ou já fechou.
+   *
+   * A página do leilão rotula assim:
+   *   "1º Encerramento - 20/08/2026 16:00"   (1ª praça)
+   *   "2º Encerramento - 03/09/2026 16:00"   (2ª praça)
+   *   "1º Ciclo - 18/09/2026 16:30"          (venda direta)
+   *
+   * Um mesmo leilão pode ter 6 datas: 2 praças e 4 ciclos de venda
+   * direta. Gravamos o PRÓXIMO encerramento ainda no futuro, não o
+   * último — dizer que o prazo é 08/12 quando a 1ª praça fecha em 22 dias
+   * faria o usuário perder o lote achando que tinha tempo.
+   *
+   * Sem nenhuma data futura, devolve a última: serve para saber que o
+   * leilão já acabou.
+   */
+  parseDataFim(html: string, agora = new Date()): string | undefined {
+    const t = cheerio.load(html)('body').text().replace(/\s+/g, ' ');
+    const datas = [...t.matchAll(/(?:Encerramento|Ciclo)\s*-\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/g)]
+      .map((m) => `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:00`)
+      .sort();
+    if (!datas.length) return undefined;
+
+    const iso = agora.toISOString().slice(0, 19);
+    return datas.find((d) => d > iso) ?? datas[datas.length - 1];
+  }
+
+  /** Busca o encerramento de cada leilão distinto. Sequencial, com delay. */
+  async fetchDatasLeilao(ids: string[]): Promise<Map<string, string>> {
+    const datas = new Map<string, string>();
+    for (const id of ids) {
+      await sleep(DELAY_MS);
+      try {
+        const r = await fetch(`${BASE}/leilao/${id}`, { headers: HEADERS });
+        if (!r.ok) continue;
+        const d = this.parseDataFim(await r.text());
+        if (d) datas.set(id, d);
+      } catch {
+        // um leilão sem data não impede os outros
+      }
+    }
+    console.log(`[${this.slug}] datas: ${datas.size}/${ids.length} leilões com encerramento`);
+    return datas;
+  }
+
   /** "Página 3 de 18" -> 18 */
   totalPaginas(html: string): number {
     const t = cheerio.load(html)('body').text().replace(/\s+/g, ' ');
@@ -179,7 +228,7 @@ export class LeiloesJudiciaisAdapter {
     return todos;
   }
 
-  async fetchAllLots(): Promise<LjRawLot[]> {
+  async fetchAllLots(comDatas = true): Promise<LjRawLot[]> {
     const todos: LjRawLot[] = [];
     for (const cat of CATEGORIAS) {
       try {
@@ -190,6 +239,15 @@ export class LeiloesJudiciaisAdapter {
       }
       await sleep(DELAY_MS);
     }
+
+    // Segunda passada só pelos leilões DISTINTOS: são ~330 para ~2.100
+    // lotes, então buscar por leilão custa 6x menos que por lote.
+    if (comDatas && todos.length) {
+      const ids = [...new Set(todos.map((l) => l.leilaoId))];
+      const datas = await this.fetchDatasLeilao(ids);
+      for (const l of todos) l.auction_date_end = datas.get(l.leilaoId);
+    }
+
     return todos;
   }
 }

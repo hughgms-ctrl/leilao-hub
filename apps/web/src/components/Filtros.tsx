@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { titulo } from '@/lib/utils';
 import type { Stats } from '@/types';
 import type { Filtros as FiltrosMap } from '@/hooks';
-import { Search, X, BadgeCheck, Scale } from 'lucide-react';
+import { Search, X, BadgeCheck, Scale, CalendarClock } from 'lucide-react';
 
 const TODOS = '__todos__';
 
@@ -129,6 +129,29 @@ export function Filtros({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* Prazo para dar lance. Sem isto não dava para saber se um lote
+            fecha amanhã ou já fechou — era a informação que mais faltava.
+            Leilão sem data publicada fica de fora quando o filtro está
+            ligado, em vez de aparecer como se tivesse prazo. */}
+        {[
+          { dias: 3, rotulo: '3 dias' },
+          { dias: 7, rotulo: '7 dias' },
+          { dias: 30, rotulo: '30 dias' },
+        ].map(({ dias, rotulo }) => (
+          <Button
+            key={dias}
+            size="sm"
+            variant={filtros.encerra_em === String(dias) ? 'default' : 'outline'}
+            onClick={() =>
+              setFiltro('encerra_em', filtros.encerra_em === String(dias) ? '' : String(dias))
+            }
+            title={`Leilões que encerram nos próximos ${dias} dias`}
+          >
+            <CalendarClock className="mr-1 h-4 w-4" />
+            {rotulo}
+          </Button>
+        ))}
+
         <Button
           size="sm"
           variant={filtros.parcelamento === 'true' ? 'default' : 'outline'}
