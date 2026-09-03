@@ -26,8 +26,16 @@ export interface Parcelamento {
 const BASE_LEGAL = /art(?:igo)?\.?\s*895|cpc\s*,?\s*895|895\s*do\s*cpc/i;
 const CONTEXTO_PARCELA = /parcelad|parcelament|parcelas?\s+mensa|presta[çc][õo]es/i;
 
-/** "no mínimo 25% do valor ofertado à vista, a título de sinal" */
-const ENTRADA = /(\d{1,3})\s*%[^.;]{0,80}?(?:à\s*vista|a\s*vista|sinal|entrada|caução)/i;
+/**
+ * "no mínimo 25% do valor ofertado à vista, a título de sinal"
+ *
+ * O "a" de "à vista" aceita as três grafias que aparecem na prática:
+ * edital de leiloeiro escreve "á vista" com acento agudo mais vezes do
+ * que se imagina, e a versão anterior (só à/a) perdia a entrada em
+ * silêncio — sobrava "permite: true, 30 parcelas" sem o percentual, que
+ * é justamente o número que decide a compra.
+ */
+const ENTRADA = /(\d{1,3})\s*%[^.;]{0,80}?(?:[àáa]\s*vista|sinal|entrada|caução)/i;
 /** "o saldo ser dividido em até 30 parcelas mensais" */
 const PARCELAS = /at[ée]\s*(\d{1,3})\s*(?:\([^)]*\)\s*)?(?:parcelas|presta[çc][õo]es|meses|vezes)/i;
 

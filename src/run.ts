@@ -5,6 +5,7 @@ import { ZukAdapter } from './adapters/zuk';
 import { SuperbidAdapter } from './adapters/superbid';
 import { LeiloesJudiciaisAdapter } from './adapters/leiloes-judiciais';
 import { SfrazaoAdapter } from './adapters/sfrazao';
+import { PlataformaSlAdapter, SITES as SITES_SL } from './adapters/plataforma-sl';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -123,6 +124,31 @@ async function coletarSfrazao(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+/**
+ * Plataforma SL: 5 leiloeiros no mesmo software. Cada um vira um
+ * raw_scrape com o SEU slug — gravar tudo junto faria o card mostrar o
+ * nome da plataforma no lugar do leiloeiro.
+ */
+async function coletarPlataformaSl(hasDb: boolean): Promise<number> {
+  const a = new PlataformaSlAdapter();
+  console.log(`\n[${a.slug}] ${SITES_SL.length} leiloeiros na mesma plataforma...`);
+  let total = 0;
+
+  for (const site of SITES_SL) {
+    try {
+      const lotes = await a.fetchSite(site);
+      total += lotes.length;
+      if (hasDb && lotes.length) {
+        await saveRawScrape(site.slug, 'lot_detail', { results: lotes }, 'leilao/lotes/veiculos');
+      }
+    } catch (e) {
+      console.error(`[${a.slug}] ${site.slug} FALHOU:`, (e as Error).message);
+    }
+  }
+  console.log(`[${a.slug}] ${total} lotes coletados`);
+  return total;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
@@ -130,6 +156,7 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'portal-zuk': coletarZuk,
   'superbid-judicial': coletarSuperbid,
   'leiloes-judiciais': coletarLeiloesJudiciais,
+  'plataforma-sl': coletarPlataformaSl,
   // 'sfrazao' fica FORA da rotação: o site devolve HTTP 403 para IP de
   // datacenter. Mesmo código e mesmos cabeçalhos passam da máquina local
   // e falham no runner do Actions, com e sem Sec-Fetch-* completo — dois

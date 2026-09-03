@@ -6,6 +6,8 @@ import { mapZukDoc } from './mappers/zuk';
 import { mapSuperbidDoc } from './mappers/superbid';
 import { mapLeiloesJudiciaisDoc } from './mappers/leiloes-judiciais';
 import { mapSfrazaoDoc } from './mappers/sfrazao';
+import { mapPlataformaSlDoc } from './mappers/plataforma-sl';
+import { SITES as SITES_SL } from '../adapters/plataforma-sl';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
 import { calcularScore } from '../score';
@@ -29,6 +31,8 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'superbid-judicial': mapSuperbidDoc,
   'leiloes-judiciais': mapLeiloesJudiciaisDoc,
   'sfrazao': mapSfrazaoDoc,
+  // os 5 leiloeiros da plataforma SL usam o mesmo mapper
+  ...Object.fromEntries(SITES_SL.map((s) => [s.slug, mapPlataformaSlDoc])),
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -39,6 +43,8 @@ function leilaoUrl(slug: string, externalId: string): string {
   if (slug === 'mega-leiloes') {
     return `https://www.megaleiloes.com.br/auditorio/${externalId}`;
   }
+  const sl = SITES_SL.find((x) => x.slug === slug);
+  if (sl) return `https://${sl.host}/leilao/${externalId}/lotes/lista`;
   if (slug === 'sfrazao') {
     return `https://www.sfrazao.com.br/leilao.php?idLeilao=${externalId}`;
   }
@@ -128,6 +134,7 @@ const NOME_EXIBICAO: Record<string, string> = {
   'superbid-judicial': 'Canal Judicial',
   'leiloes-judiciais': 'Leilões Judiciais',
   'sfrazao': 'S. Frazão',
+  ...Object.fromEntries(SITES_SL.map((s) => [s.slug, s.nome])),
 };
 
 async function ensureLeiloeiro(slug: string): Promise<Leiloeiro> {
