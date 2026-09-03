@@ -7,7 +7,8 @@
     "scrape": "tsx src/run.ts",
     "typecheck": "tsc --noEmit",
     "normalize": "tsx src/run-normalizer.ts",
-    "verify": "tsx src/verificar-scrape.ts"
+    "verify": "tsx src/verificar-scrape.ts",
+    "sondar": "tsx src/sondar-fontes.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

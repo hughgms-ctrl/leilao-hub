@@ -1,0 +1,31 @@
+name: sondar fontes
+
+# Só manual. Não coleta nada, não escreve no banco: faz UMA requisição à
+# home de cada leiloeiro candidato e reporta o status.
+#
+# Existe para responder, ANTES de escrever adapter, se o site aceita
+# requisição vinda de IP de datacenter. O S. Frazão custou um adapter
+# inteiro para só então revelar HTTP 403 no runner.
+on:
+  workflow_dispatch:
+
+concurrency: sondar-leilao
+
+jobs:
+  sondar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Sondar
+        run: npm run sondar

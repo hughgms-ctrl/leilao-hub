@@ -130,7 +130,15 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'portal-zuk': coletarZuk,
   'superbid-judicial': coletarSuperbid,
   'leiloes-judiciais': coletarLeiloesJudiciais,
-  'sfrazao': coletarSfrazao,
+  // 'sfrazao' fica FORA da rotação: o site devolve HTTP 403 para IP de
+  // datacenter. Mesmo código e mesmos cabeçalhos passam da máquina local
+  // e falham no runner do Actions, com e sem Sec-Fetch-* completo — dois
+  // runs confirmaram. É bloqueio deliberado por origem, não filtro de
+  // cabeçalho. Contornar exigiria proxy residencial, que é burlar o
+  // bloqueio. O adapter e o mapper ficam prontos e testados (6/6 lotes do
+  // leilão 478) para o dia em que houver um caminho legítimo — basta
+  // devolver a linha abaixo.
+  // 'sfrazao': coletarSfrazao,
 };
 
 async function main() {
