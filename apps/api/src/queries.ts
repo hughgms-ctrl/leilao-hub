@@ -84,6 +84,8 @@ const COLUNAS_ITEM = `
   lo.slug AS leiloeiro_slug, lo.nome AS leiloeiro,
   le.permite_parcelamento, le.parcelamento_entrada_pct, le.parcelamento_parcelas_max,
   le.is_judicial,
+  -- prazo para dar lance: e o proximo encerramento ainda futuro
+  le.data_fim,
   l.pagina_url, img.urls AS imagens`;
 
 export async function listarLotes(q: ListaLotesQuery, opts: OpcoesLista = {}) {
@@ -136,7 +138,7 @@ export async function buscarLote(id: number) {
             l.descricao, l.combustivel, l.tem_chave, l.comitente,
             l.first_seen_at, l.last_seen_at,
             le.external_id AS leilao_external_id, le.titulo AS leilao_titulo,
-            le.pagina_url AS leilao_url, le.data_inicio, le.data_fim,
+            le.pagina_url AS leilao_url, le.data_inicio,
             le.modalidade, le.cidade AS leilao_cidade, le.status AS leilao_status,
             le.edital_pdf_url, le.condicoes_pagamento, le.leiloeiro_nome AS leilao_leiloeiro,
             le.jucesp, le.is_judicial,

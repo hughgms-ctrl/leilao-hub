@@ -32,6 +32,7 @@ export interface Lote {
   parcelamento_entrada_pct: string | null;
   parcelamento_parcelas_max: number | null;
   is_judicial: boolean | null;
+  data_fim: string | null;
 }
 
 export interface ListaResposta {

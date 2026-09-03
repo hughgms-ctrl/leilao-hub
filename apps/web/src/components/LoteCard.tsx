@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { CarrosselFotos } from '@/components/CarrosselFotos';
 import { brl, pct, titulo, cn } from '@/lib/utils';
 import type { Lote } from '@/types';
-import { ExternalLink, Gauge, MapPin, TriangleAlert, BadgeCheck, Scale } from 'lucide-react';
+import { ExternalLink, Gauge, MapPin, TriangleAlert, BadgeCheck, Scale, CalendarClock } from 'lucide-react';
 
 /** verde > 0.4 | amarelo 0.2–0.4 | neutro < 0.2 */
 function faixaScore(score: number) {
@@ -26,6 +26,18 @@ export function LoteCard({ lote }: { lote: Lote }) {
   const fotos = lote.imagens ?? [];
   const nome = `${titulo(lote.marca)} ${titulo(lote.modelo)}`.trim();
   const local = [titulo(lote.cidade), lote.uf].filter(Boolean).join('/');
+
+  // Prazo para dar lance. Antes o card não dizia nada, e não havia como
+  // saber se o lote fechava amanhã ou já tinha fechado.
+  const prazo = (() => {
+    if (!lote.data_fim) return null;
+    const fim = new Date(lote.data_fim);
+    const dias = Math.ceil((fim.getTime() - Date.now()) / 86_400_000);
+    if (Number.isNaN(dias) || dias < 0) return null;
+    const quando =
+      dias === 0 ? 'encerra hoje' : dias === 1 ? 'encerra amanhã' : `encerra em ${dias} dias`;
+    return { quando, urgente: dias <= 3, data: fim.toLocaleDateString('pt-BR') };
+  })();
 
   // Quanto o lance está abaixo da FIPE. Só faz sentido com os dois lados
   // e com lance MENOR — lote acima da tabela não ganha selo de desconto.
@@ -82,6 +94,19 @@ export function LoteCard({ lote }: { lote: Lote }) {
               )}
             </p>
           </div>
+
+          {prazo && (
+            <p
+              className={cn(
+                'flex items-center gap-1 text-xs font-medium',
+                prazo.urgente ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+              )}
+              title={`Encerramento: ${prazo.data}`}
+            >
+              <CalendarClock className="h-3 w-3 shrink-0" />
+              {prazo.quando}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-1.5">
             {/* "indefinida" é o default interno quando o leiloeiro não
