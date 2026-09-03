@@ -6,6 +6,7 @@ import { SuperbidAdapter } from './adapters/superbid';
 import { LeiloesJudiciaisAdapter } from './adapters/leiloes-judiciais';
 import { SfrazaoAdapter } from './adapters/sfrazao';
 import { PlataformaSlAdapter, SITES as SITES_SL } from './adapters/plataforma-sl';
+import { ELeiloesAdapter } from './adapters/e-leiloes';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -149,6 +150,19 @@ async function coletarPlataformaSl(hasDb: boolean): Promise<number> {
   return total;
 }
 
+async function coletarELeiloes(hasDb: boolean): Promise<number> {
+  const a = new ELeiloesAdapter();
+  console.log(`\n[${a.slug}] paginando /busca (HTML) — acervo misto, filtrando veiculos...`);
+  const lotes = await a.fetchAllLots(true);
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'busca');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
@@ -157,6 +171,7 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'superbid-judicial': coletarSuperbid,
   'leiloes-judiciais': coletarLeiloesJudiciais,
   'plataforma-sl': coletarPlataformaSl,
+  'e-leiloes': coletarELeiloes,
   // 'sfrazao' fica FORA da rotação: o site devolve HTTP 403 para IP de
   // datacenter. Mesmo código e mesmos cabeçalhos passam da máquina local
   // e falham no runner do Actions, com e sem Sec-Fetch-* completo — dois

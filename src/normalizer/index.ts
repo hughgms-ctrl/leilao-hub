@@ -7,6 +7,7 @@ import { mapSuperbidDoc } from './mappers/superbid';
 import { mapLeiloesJudiciaisDoc } from './mappers/leiloes-judiciais';
 import { mapSfrazaoDoc } from './mappers/sfrazao';
 import { mapPlataformaSlDoc } from './mappers/plataforma-sl';
+import { mapELeiloesDoc } from './mappers/e-leiloes';
 import { SITES as SITES_SL } from '../adapters/plataforma-sl';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
@@ -33,6 +34,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   'sfrazao': mapSfrazaoDoc,
   // os 5 leiloeiros da plataforma SL usam o mesmo mapper
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, mapPlataformaSlDoc])),
+  'e-leiloes': mapELeiloesDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -134,6 +136,7 @@ const NOME_EXIBICAO: Record<string, string> = {
   'superbid-judicial': 'Canal Judicial',
   'leiloes-judiciais': 'Leilões Judiciais',
   'sfrazao': 'S. Frazão',
+  'e-leiloes': 'E-Leilões',
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, s.nome])),
 };
 
