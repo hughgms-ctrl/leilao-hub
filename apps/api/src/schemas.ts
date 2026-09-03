@@ -32,6 +32,8 @@ export const listaLotesSchema = z.object({
   financiavel: z.enum(['true', 'false']).optional(),
   parcelamento: z.enum(['true', 'false']).optional(),
   judicial: z.enum(['true', 'false']).optional(),
+  /** traz também lote que já saiu da fonte (padrão: só ativo) */
+  incluir_encerrados: z.enum(['true', 'false']).optional(),
   order: z.enum(ORDER_COLS).optional().default('score'),
   dir: z.enum(ORDER_DIRS).optional().default('desc'),
   page: z.coerce.number().int().min(1).optional().default(1),

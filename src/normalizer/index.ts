@@ -218,6 +218,9 @@ async function upsertLote(
        financiavel = COALESCE(EXCLUDED.financiavel, lotes.financiavel),
        valor_mercado = COALESCE(EXCLUDED.valor_mercado, lotes.valor_mercado),
        last_seen_at = now(),
+       -- lote que reaparece volta a ser ativo: fonte que oscila (ou
+       -- coleta que falhou uma vez) não deixa acervo morto para trás
+       encerrado_em = NULL,
        updated_at = now()
      RETURNING id,
        (SELECT lance_atual FROM lotes o WHERE o.leiloeiro_id = $2 AND o.external_id = $3) AS lance_anterior,
@@ -416,6 +419,63 @@ async function processarLeiloes(
   return ok;
 }
 
+/**
+ * Fração mínima do acervo ativo que a coleta precisa ter revisto para que
+ * a expiração seja aplicada.
+ *
+ * Sem isso, uma coleta parcial (fonte fora do ar no meio da paginação,
+ * mudança de layout que quebra o parser, categoria que falhou) encerraria
+ * o acervo inteiro de uma vez — e a recuperação exigiria recoletar tudo.
+ * 0.5 é conservador: mesmo que a fonte tire metade dos lotes de uma
+ * semana para a outra, ainda expira.
+ */
+const FRACAO_MINIMA_PARA_EXPIRAR = 0.5;
+
+/**
+ * Marca como encerrado o lote que a fonte não mostra mais.
+ *
+ * O critério é ausência na coleta, não data: só o Superbid publica
+ * data_fim de forma confiável (os outros vêm nulos), então esperar a data
+ * passar deixaria lote morto no ar por tempo indeterminado.
+ *
+ * `inicio` é o instante anterior ao processamento deste scrape. Lote com
+ * last_seen_at >= inicio foi revisto agora; o resto sumiu.
+ *
+ * Reversível de propósito: se o lote reaparecer numa coleta seguinte, o
+ * upsert limpa encerrado_em. Fonte que oscila não perde acervo.
+ */
+async function marcarEncerrados(
+  leiloeiroId: number,
+  slug: string,
+  inicio: string,
+): Promise<void> {
+  const contagem = await pool.query(
+    `SELECT count(*) FILTER (WHERE last_seen_at >= $2) AS revistos,
+            count(*) AS ativos
+     FROM lotes
+     WHERE leiloeiro_id = $1 AND encerrado_em IS NULL`,
+    [leiloeiroId, inicio],
+  );
+  const revistos = Number(contagem.rows[0].revistos);
+  const ativos = Number(contagem.rows[0].ativos);
+
+  if (ativos > 0 && revistos / ativos < FRACAO_MINIMA_PARA_EXPIRAR) {
+    console.warn(
+      `[normalizer] ${slug}: coleta reviu só ${revistos}/${ativos} lotes ativos ` +
+        `(< ${FRACAO_MINIMA_PARA_EXPIRAR * 100}%) — expiração NÃO aplicada, ` +
+        `provável coleta parcial`,
+    );
+    return;
+  }
+
+  const r = await pool.query(
+    `UPDATE lotes SET encerrado_em = now(), updated_at = now()
+     WHERE leiloeiro_id = $1 AND encerrado_em IS NULL AND last_seen_at < $2`,
+    [leiloeiroId, inicio],
+  );
+  if (r.rowCount) console.log(`[normalizer] ${slug}: ${r.rowCount} lotes encerrados (sumiram da fonte)`);
+}
+
 export async function processarPendentes(): Promise<void> {
   const pendentes = await pool.query(
     `SELECT rs.id, rs.tipo, rs.payload, rs.leiloeiro_id, le.slug
@@ -460,6 +520,9 @@ export async function processarPendentes(): Promise<void> {
     try {
       const leiloeiro = await ensureLeiloeiro(row.slug);
       const docs: Record<string, any>[] = row.payload?.results ?? [];
+      // instante de referência para a expiração: quem não for revisto
+      // daqui para frente é lote que saiu da fonte
+      const inicio = (await pool.query('SELECT now() AS t')).rows[0].t;
       let ok = 0;
       let comFipe = 0;
 
@@ -485,6 +548,10 @@ export async function processarPendentes(): Promise<void> {
         }
         ok++;
       }
+
+      // só depois de processar TODOS os lotes deste scrape: senão
+      // encerraríamos lote que ainda estava na fila para ser revisto
+      await marcarEncerrados(leiloeiro.id, row.slug, inicio);
 
       await pool.query(
         `UPDATE raw_scrapes SET processado = true, erro = null WHERE id = $1`,

@@ -11,6 +11,12 @@ function montarFiltros(q: ListaLotesQuery, opts: OpcoesLista = {}) {
   const where: string[] = [];
   const params: unknown[] = [];
   if (opts.apenasComScore) where.push('l.score_oportunidade IS NOT NULL');
+
+  // Lote que saiu da listagem da fonte não aparece por padrão. Sem isto a
+  // plataforma servia leilão já encerrado como se estivesse aberto — em
+  // 03/09/2026 eram 1.823 de 5.598 lotes (33%). `incluir_encerrados=true`
+  // traz de volta, para consulta de histórico.
+  if (q.incluir_encerrados !== 'true') where.push('l.encerrado_em IS NULL');
   const add = (sql: string, valor: unknown) => {
     params.push(valor);
     where.push(sql.replace('?', `$${params.length}`));
@@ -174,18 +180,19 @@ export async function estatisticas() {
            count(*) FILTER (WHERE score_tipo = 'especulativo')::int AS especulativos,
            count(*) FILTER (WHERE financiavel)::int AS financiaveis,
            (SELECT count(*)::int FROM lotes x JOIN leiloes y ON y.id = x.leilao_id
-             WHERE y.permite_parcelamento) AS parcelaveis,
+             WHERE y.permite_parcelamento AND x.encerrado_em IS NULL) AS parcelaveis,
            (SELECT count(*)::int FROM lotes x JOIN leiloes y ON y.id = x.leilao_id
-             WHERE y.is_judicial) AS judiciais,
+             WHERE y.is_judicial AND x.encerrado_em IS NULL) AS judiciais,
            round(avg(score_oportunidade), 4) AS score_medio
-    FROM lotes`);
+    -- só acervo ativo: contar lote que saiu da fonte inflava tudo
+    FROM lotes WHERE encerrado_em IS NULL`);
 
   const porGrupo = async (col: string) =>
     (
       await pool.query(
         `SELECT ${col} AS valor, count(*)::int AS total,
                 count(score_oportunidade)::int AS com_score
-         FROM lotes WHERE ${col} IS NOT NULL
+         FROM lotes WHERE ${col} IS NOT NULL AND encerrado_em IS NULL
          GROUP BY ${col} ORDER BY total DESC`,
       )
     ).rows;
@@ -195,6 +202,7 @@ export async function estatisticas() {
       `SELECT lo.slug AS valor, lo.nome, count(*)::int AS total,
               count(l.score_oportunidade)::int AS com_score
        FROM lotes l JOIN leiloeiros lo ON lo.id = l.leiloeiro_id
+       WHERE l.encerrado_em IS NULL
        GROUP BY lo.slug, lo.nome ORDER BY total DESC`,
     )
   ).rows;
