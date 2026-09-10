@@ -114,12 +114,26 @@ export class LeiloesJudiciaisAdapter {
         return i >= 0 ? spans[i + 1] : undefined;
       };
 
-      const cidadeUf = spans.find((t) => /^[^/]{2,40}\/[A-Z]{2}$/.test(t));
-      // descrição: o span com " - " que não seja a cidade nem um valor
+      // Cidade é um span CURTO no formato "Cidade/UF". O `[^/\s-]` no
+      // início impede que uma descrição terminada em cidade
+      // ("Fiat Strada Hard - Ano 2018 - Sinop/MT") seja lida como
+      // endereço — isso acontecia e zerava a descrição do lote.
+      const cidadeUf = spans.find((t) => /^[^/]{2,40}\/[A-Z]{2}$/.test(t) && !/[-–—]/.test(t));
+
+      // Descrição: o maior span que sobra depois de tirar cidade, preço,
+      // rótulo, contador e status.
+      //
+      // A versão anterior exigia " - " como separador e perdia 1.968 dos
+      // 2.628 lotes: parte dos cards usa TRAVESSÃO (– U+2013) em vez de
+      // hífen ("HONDA/CG 160 START – 21/21 – Catanduva/SP"), e outros não
+      // usam separador nenhum. Não depender de separador resolve os três
+      // formatos de uma vez.
+      const RUIDO =
+        /^(#|R\$|\d+$|Avalia|Lance|clique para ver mais$|Aberto|Aguardando|Encerrad|Suspens|Vendid)/i;
       const descricao =
-        spans.find(
-          (t) => t !== cidadeUf && / - /.test(t) && !/^R\$/.test(t) && !/^#/.test(t),
-        ) ?? '';
+        spans
+          .filter((t) => t !== cidadeUf && !RUIDO.test(t) && t.length > 6)
+          .sort((a, b) => b.length - a.length)[0] ?? '';
 
       const status = spans.find(
         (t) => /lance|encerrad|suspens|vendid|aberto/i.test(t) && !/^R\$/.test(t) && !/^Lance/i.test(t),

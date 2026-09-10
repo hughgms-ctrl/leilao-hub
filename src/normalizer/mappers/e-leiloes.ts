@@ -22,12 +22,13 @@ export function mapELeiloesDoc(d: Record<string, any>): DbLot | null {
   if (!d.loteId) return null;
 
   const titulo = String(d.titulo ?? '');
-  const detalhe = String(d.descricao ?? '');
-  // "Veículo X, cor azul, ... Ano/Modelo 2000/2000" já vem com vírgula,
-  // que é o separador que parseShortDesc espera
-  const bruta = detalhe ? `${titulo}, ${detalhe.replace(/^Ve[íi]culo\s+/i, '')}` : titulo;
-
-  const p = parseShortDesc(bruta);
+  // Ano e cor vêm em CAMPO do detalhe, não dentro de um texto — o site
+  // escreve cada lote de um jeito. parseShortDesc cuida só de
+  // marca/modelo, a partir do título.
+  const p = parseShortDesc(titulo);
+  const anoFab = typeof d.anoFab === 'number' ? d.anoFab : p.anoFab;
+  const anoModelo = typeof d.anoModelo === 'number' ? d.anoModelo : p.anoModelo;
+  const bruta = titulo;
   const [cidade, uf] = String(d.cidadeUf ?? '').split(' - ').map((s: string) => s?.trim());
 
   const tipo = RX_PESADO.test(titulo) ? 'caminhões' : RX_MOTO.test(titulo) ? 'motos' : 'carros';
@@ -43,10 +44,13 @@ export function mapELeiloesDoc(d: Record<string, any>): DbLot | null {
     tipo,
     marca: p.marca,
     modelo: p.modelo,
-    anoFabricacao: p.anoFab,
-    anoModelo: p.anoModelo,
-    cor: p.cor,
-    combustivel: /\b(gasolina|diesel|flex|[áa]lcool|etanol)\b/i.exec(bruta)?.[1]?.toLowerCase(),
+    anoFabricacao: anoFab,
+    anoModelo: anoModelo,
+    cor: d.cor ? String(d.cor) : p.cor,
+    // o combustível vem do detalhe; o título raramente o traz
+    combustivel: d.combustivel
+      ? String(d.combustivel)
+      : /\b(gasolina|diesel|flex|[áa]lcool|etanol)\b/i.exec(bruta)?.[1]?.toLowerCase(),
     km: undefined,
     condicao: /sucata/i.test(bruta) ? 'sucata' : conserv,
     origem: /judicial/i.test(String(d.tipoLeilao ?? '')) ? 'judicial' : undefined,

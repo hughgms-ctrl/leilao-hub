@@ -40,7 +40,10 @@ export interface ElRawLot {
   paginaUrl: string;
   imagem?: string;
   /** vindos do detalhe */
-  descricao?: string;
+  anoFab?: number;
+  anoModelo?: number;
+  cor?: string;
+  combustivel?: string;
   auction_name?: string;
   auction_date_end?: string;
   tipoLeilao?: string;
@@ -132,14 +135,25 @@ export class ELeiloesAdapter {
     const data = t.match(/Leil[ãa]o [úu]nico[^0-9]{0,20}R\$[\d.,]+\s*(\d{2}\/\d{2}\/\d{4},?\s*\d{1,2}:\d{2})/i)
       ?? t.match(/(\d{2}\/\d{2}\/\d{4},\s*\d{1,2}:\d{2})/);
 
-    // "Veículo GM/Astra GLS, cor azul, ... Ano/Modelo 2000/2000"
-    const desc = t.match(/(Ve[íi]culo\s+.{10,300}?Ano\/Modelo\s*\d{4}\/\d{4})/i)?.[1];
+    // Ano e cor saem por CAMPO, não recortando o bloco de descrição.
+    //
+    // A primeira versão ancorava em "Veículo ...", que é como um lote
+    // estava escrito — e só 10 dos 79 seguem esse padrão. Outros abrem
+    // direto pelo nome ("TOYOTA BAND. PICAPE CD 4P ... Ano/Modelo
+    // 2000/2000"). Recortar o bloco também é frágil: "BAND." tem ponto no
+    // meio do nome, então qualquer corte por sentença parte o modelo.
+    const ano = t.match(/Ano\/Modelo\s*(\d{4})\/(\d{4})/i);
+    const cor = t.match(/Cor:\s*([A-Za-zÀ-ÿ]+)/i)?.[1];
+    const combustivel = t.match(/\b(gasolina|diesel|flex|[áa]lcool|etanol)\b/i)?.[1];
 
     // sem espaco depois do rotulo: "ObservacoesCaracteristicas: ..."
     const obs = t.match(/Observa[çc][õo]es\s*(.{10,1200}?)(?:Documentos|Edital|Compartilhar|$)/i)?.[1];
 
     return {
-      descricao: desc?.trim(),
+      anoFab: ano ? Number(ano[1]) : undefined,
+      anoModelo: ano ? Number(ano[2]) : undefined,
+      cor: cor?.toLowerCase(),
+      combustivel: combustivel?.toLowerCase(),
       auction_name: vara?.[1]?.trim(),
       auction_date_end: dataBr(data?.[1]),
       tipoLeilao: vara?.[2]?.trim(),
@@ -186,7 +200,7 @@ export class ELeiloesAdapter {
           const d = await fetch(l.paginaUrl, { headers: HEADERS });
           if (!d.ok) continue;
           Object.assign(l, this.parseDetalhe(await d.text()));
-          if (l.descricao && /\d{4}\/\d{4}/.test(l.descricao)) comAno++;
+          if (l.anoModelo) comAno++;
         } catch {
           // um detalhe que falha não derruba a coleta
         }

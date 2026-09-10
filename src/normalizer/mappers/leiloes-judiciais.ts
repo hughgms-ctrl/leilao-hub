@@ -26,7 +26,10 @@ export function mapLeiloesJudiciaisDoc(d: Record<string, any>): DbLot | null {
   if (!d.leilaoId || !d.loteId) return null;
 
   const bruta = String(d.descricao ?? '');
-  const p = parseShortDesc(bruta.replace(/\s+-\s+/g, ', '));
+  // A fonte usa hífen E travessão (– U+2013, — U+2014) como separador,
+  // às vezes no mesmo dia. Normalizar só o hífen deixava
+  // "HONDA/CG 160 START – 21/21 – Catanduva/SP" inteiro dentro do modelo.
+  const p = parseShortDesc(bruta.replace(/\s*[-–—]\s+/g, ', '));
 
   const [cidade, uf] = String(d.cidadeUf ?? '').split('/').map((s: string) => s?.trim());
 
