@@ -34,7 +34,13 @@ jobs:
     # sa-east-1, e escala com o número de lotes. Com a Freitas somos
     # 1.305, então 45 min não cabia mais. Margem larga também cobre a
     # virada do mês, quando o cache da FIPE expira inteiro.
-    timeout-minutes: 90
+    # 90 min ficou apertado: em 10/09/2026 a coleta rodou 137 min e foi
+    # cancelada por estouro de tempo, no meio do normalize. O gatilho foi
+    # a correcao do Leiloes Judiciais, que recuperou 1.968 lotes de uma
+    # vez — e cada lote NOVO consulta a FIPE com FIPE_DELAY_MS. Repositorio
+    # publico tem minutos ilimitados, entao o teto alto so evita perder
+    # trabalho ja feito.
+    timeout-minutes: 240
 
     env:
       DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
