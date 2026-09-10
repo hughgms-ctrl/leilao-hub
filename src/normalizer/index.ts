@@ -9,6 +9,9 @@ import { mapSfrazaoDoc } from './mappers/sfrazao';
 import { mapPlataformaSlDoc } from './mappers/plataforma-sl';
 import { mapELeiloesDoc } from './mappers/e-leiloes';
 import { mapNakakogueDoc } from './mappers/nakakogue';
+import { mapEdgarCarvalhoDoc } from './mappers/edgar-carvalho';
+import { SITES_EC } from '../adapters/edgar-carvalho';
+import { mapChBarbosaDoc } from './mappers/chbarbosa';
 import { SITES as SITES_SL } from '../adapters/plataforma-sl';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
@@ -37,6 +40,8 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, mapPlataformaSlDoc])),
   'e-leiloes': mapELeiloesDoc,
   'nakakogue': mapNakakogueDoc,
+  ...Object.fromEntries(SITES_EC.map((s) => [s.slug, mapEdgarCarvalhoDoc])),
+  'ch-barbosa': mapChBarbosaDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -49,6 +54,11 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   const sl = SITES_SL.find((x) => x.slug === slug);
   if (sl) return `https://${sl.host}/leilao/${externalId}/lotes/lista`;
+  const ec = SITES_EC.find((x) => x.slug === slug);
+  if (ec) return `https://${ec.host}/leiloes`;
+  if (slug === 'ch-barbosa') {
+    return `https://www.chbarbosaleiloes.com.br/lote/x/${externalId}/`;
+  }
   if (slug === 'nakakogue') {
     return `https://www.nakakogueleiloes.com.br/lotes/${externalId}`;
   }
@@ -143,6 +153,8 @@ const NOME_EXIBICAO: Record<string, string> = {
   'sfrazao': 'S. Frazão',
   'e-leiloes': 'E-Leilões',
   'nakakogue': 'Nakakogue Leilões',
+  ...Object.fromEntries(SITES_EC.map((s) => [s.slug, s.nome])),
+  'ch-barbosa': 'CH Barbosa Leilões',
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, s.nome])),
 };
 

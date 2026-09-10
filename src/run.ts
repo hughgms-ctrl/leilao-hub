@@ -8,6 +8,8 @@ import { SfrazaoAdapter } from './adapters/sfrazao';
 import { PlataformaSlAdapter, SITES as SITES_SL } from './adapters/plataforma-sl';
 import { ELeiloesAdapter } from './adapters/e-leiloes';
 import { NakakogueAdapter } from './adapters/nakakogue';
+import { EdgarCarvalhoAdapter, SITES_EC } from './adapters/edgar-carvalho';
+import { ChBarbosaAdapter } from './adapters/chbarbosa';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -177,6 +179,40 @@ async function coletarNakakogue(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+async function coletarEdgarCarvalho(hasDb: boolean): Promise<number> {
+  const a = new EdgarCarvalhoAdapter();
+  console.log(`\n[${a.slug}] /veiculos (HTML) + detalhe...`);
+  let total = 0;
+  for (const site of SITES_EC) {
+    try {
+      const lotes = await a.fetchSite(site);
+      total += lotes.length;
+      if (hasDb && lotes.length) {
+        await saveRawScrape(site.slug, 'lot_detail', { results: lotes }, 'veiculos');
+      }
+    } catch (e) {
+      console.error(`[${a.slug}] ${site.slug} FALHOU:`, (e as Error).message);
+    }
+  }
+  console.log(`[${a.slug}] ${total} lotes coletados`);
+  return total;
+}
+
+/** Unica fonte que precisa de navegador — ver o cabecalho do adapter. */
+async function coletarChBarbosa(hasDb: boolean): Promise<number> {
+  const a = new ChBarbosaAdapter();
+  console.log(`
+[${a.slug}] busca por categoria (Chromium, 1 page load)...`);
+  const lotes = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'busca/ID_Categoria=65');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
@@ -187,6 +223,8 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'plataforma-sl': coletarPlataformaSl,
   'e-leiloes': coletarELeiloes,
   'nakakogue': coletarNakakogue,
+  'edgar-carvalho': coletarEdgarCarvalho,
+  'ch-barbosa': coletarChBarbosa,
   // 'sfrazao' fica FORA da rotação: o site devolve HTTP 403 para IP de
   // datacenter. Mesmo código e mesmos cabeçalhos passam da máquina local
   // e falham no runner do Actions, com e sem Sec-Fetch-* completo — dois
