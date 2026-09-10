@@ -302,6 +302,24 @@ async function upsertLote(
        descricao = COALESCE(EXCLUDED.descricao, lotes.descricao),
        tipo = EXCLUDED.tipo,
        condicao = EXCLUDED.condicao,
+       -- IDENTIDADE DO VEÍCULO: sem estas linhas os campos eram
+       -- gravados UMA VEZ e nunca mais. Consequência real: 538 lotes
+       -- criados durante o bug do travessão ficaram com marca nula para
+       -- sempre, aparecendo no ranking sem nome, e NENHUMA correção de
+       -- parser alcançava lote já existente — só lote novo.
+       --
+       -- COALESCE na ordem (novo, antigo) é o que torna seguro: parser
+       -- melhor preenche o que faltava, parser que falha não apaga o que
+       -- já estava certo.
+       marca = COALESCE(EXCLUDED.marca, lotes.marca),
+       modelo = COALESCE(EXCLUDED.modelo, lotes.modelo),
+       ano_fabricacao = COALESCE(EXCLUDED.ano_fabricacao, lotes.ano_fabricacao),
+       ano_modelo = COALESCE(EXCLUDED.ano_modelo, lotes.ano_modelo),
+       cor = COALESCE(EXCLUDED.cor, lotes.cor),
+       combustivel = COALESCE(EXCLUDED.combustivel, lotes.combustivel),
+       tem_chave = COALESCE(EXCLUDED.tem_chave, lotes.tem_chave),
+       numero_lote = COALESCE(EXCLUDED.numero_lote, lotes.numero_lote),
+       pagina_url = COALESCE(EXCLUDED.pagina_url, lotes.pagina_url),
        origem = COALESCE(EXCLUDED.origem, lotes.origem),
        comitente = COALESCE(EXCLUDED.comitente, lotes.comitente),
        cidade = COALESCE(EXCLUDED.cidade, lotes.cidade),
@@ -364,9 +382,20 @@ async function registrarLance(loteId: number, novo: number | undefined, anterior
  * normalize. `unnest` transforma os dois arrays em linhas, e o
  * ON CONFLICT DO NOTHING mantém a idempotência.
  */
+/**
+ * Placeholder que o LEILOEIRO serve quando o lote não tem foto.
+ *
+ * Não é lixo cosmético: guardar isso como foto faz o card exibir um
+ * "SEM FOTO" em tamanho real. Com a vitrine (foto grande, 3 colunas)
+ * dois dos três primeiros lotes do ranking viravam um cartaz de câmera
+ * riscada. Cada fonte tem o seu nome de arquivo — vale a lista aberta.
+ */
+const RX_PLACEHOLDER =
+  /(nao[-_]?disponivel|nopicture|no[-_]?picture|sem[-_]?foto|no[-_]?image|placeholder|indisponivel|ImgNaoDisp|default[-_]?(img|image|photo))/i;
+
 async function inserirImagens(loteId: number, urls: string[]) {
   // dedup: URL repetida no mesmo array conflitaria contra si mesma
-  const unicas = [...new Set(urls.filter(Boolean))];
+  const unicas = [...new Set(urls.filter((u) => u && !RX_PLACEHOLDER.test(u)))];
   if (!unicas.length) return;
 
   await pool.query(
