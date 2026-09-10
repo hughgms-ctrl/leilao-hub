@@ -8,6 +8,7 @@ import { mapLeiloesJudiciaisDoc } from './mappers/leiloes-judiciais';
 import { mapSfrazaoDoc } from './mappers/sfrazao';
 import { mapPlataformaSlDoc } from './mappers/plataforma-sl';
 import { mapELeiloesDoc } from './mappers/e-leiloes';
+import { mapNakakogueDoc } from './mappers/nakakogue';
 import { SITES as SITES_SL } from '../adapters/plataforma-sl';
 import { detectarParcelamento } from './parcelamento';
 import { matchFipe, cachedFipePrice } from '../fipe/matcher';
@@ -35,6 +36,7 @@ const MAPPERS: Record<string, (d: Record<string, any>) => DbLot | null> = {
   // os 5 leiloeiros da plataforma SL usam o mesmo mapper
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, mapPlataformaSlDoc])),
   'e-leiloes': mapELeiloesDoc,
+  'nakakogue': mapNakakogueDoc,
 };
 
 /** URL da página do leilão, por leiloeiro. */
@@ -47,6 +49,9 @@ function leilaoUrl(slug: string, externalId: string): string {
   }
   const sl = SITES_SL.find((x) => x.slug === slug);
   if (sl) return `https://${sl.host}/leilao/${externalId}/lotes/lista`;
+  if (slug === 'nakakogue') {
+    return `https://www.nakakogueleiloes.com.br/lotes/${externalId}`;
+  }
   if (slug === 'sfrazao') {
     return `https://www.sfrazao.com.br/leilao.php?idLeilao=${externalId}`;
   }
@@ -137,6 +142,7 @@ const NOME_EXIBICAO: Record<string, string> = {
   'leiloes-judiciais': 'Leilões Judiciais',
   'sfrazao': 'S. Frazão',
   'e-leiloes': 'E-Leilões',
+  'nakakogue': 'Nakakogue Leilões',
   ...Object.fromEntries(SITES_SL.map((s) => [s.slug, s.nome])),
 };
 

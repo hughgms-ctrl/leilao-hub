@@ -7,6 +7,7 @@ import { LeiloesJudiciaisAdapter } from './adapters/leiloes-judiciais';
 import { SfrazaoAdapter } from './adapters/sfrazao';
 import { PlataformaSlAdapter, SITES as SITES_SL } from './adapters/plataforma-sl';
 import { ELeiloesAdapter } from './adapters/e-leiloes';
+import { NakakogueAdapter } from './adapters/nakakogue';
 import { saveRawScrape, closePool } from './db';
 import { connectionStringDireta } from './pg-config';
 
@@ -163,6 +164,19 @@ async function coletarELeiloes(hasDb: boolean): Promise<number> {
   return lotes.length;
 }
 
+async function coletarNakakogue(hasDb: boolean): Promise<number> {
+  const a = new NakakogueAdapter();
+  console.log(`\n[${a.slug}] categoria Veiculos (HTML, sem paginacao)...`);
+  const lotes = await a.fetchAllLots();
+  console.log(`[${a.slug}] ${lotes.length} lotes coletados`);
+
+  if (hasDb && lotes.length) {
+    await saveRawScrape(a.slug, 'lot_detail', { results: lotes }, 'lotes/consulta/2');
+    console.log(`[${a.slug}] salvo em raw_scrapes`);
+  }
+  return lotes.length;
+}
+
 const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'sodre-santoro': coletarSodre,
   'freitas-leiloeiro': coletarFreitas,
@@ -172,6 +186,7 @@ const FONTES: Record<string, (hasDb: boolean) => Promise<number>> = {
   'leiloes-judiciais': coletarLeiloesJudiciais,
   'plataforma-sl': coletarPlataformaSl,
   'e-leiloes': coletarELeiloes,
+  'nakakogue': coletarNakakogue,
   // 'sfrazao' fica FORA da rotação: o site devolve HTTP 403 para IP de
   // datacenter. Mesmo código e mesmos cabeçalhos passam da máquina local
   // e falham no runner do Actions, com e sem Sec-Fetch-* completo — dois
