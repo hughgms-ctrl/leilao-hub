@@ -2,46 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * IDENTIDADE: grafite + laranja.
+ *
+ * O grafite é warm (matiz ~25°), não o slate azulado do tema padrão do
+ * shadcn — azul frio era exatamente o que deixava a tela sem marca e
+ * ainda nos aproximava do BuscaAii, que é azul.
+ *
+ * REGRA DE CORES SEMÂNTICAS, para o laranja da marca não canibalizar
+ * significado:
+ *   laranja  -> marca: cabeçalho, botão primário, estado ativo
+ *   esmeralda-> desconto sobre a FIPE (nossa razão de existir)
+ *   vermelho -> prazo curto; usado em PÍLULA CHEIA, não em texto, porque
+ *               vermelho e laranja são vizinhos e a forma separa melhor
+ *               que o matiz
+ *   índigo   -> parcelável (art. 895)
+ *   zinco    -> score especulativo (era âmbar; saiu porque o âmbar virou
+ *               vizinho do laranja da marca e o aviso sumia)
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* superfícies: quase-branco levemente quente */
+    --background: 30 20% 99%;
+    --foreground: 24 10% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
-    --radius: 0.6rem;
+    --card-foreground: 24 10% 12%;
+
+    /* laranja da marca — profundo, não neon: precisa aguentar texto branco */
+    --primary: 21 90% 45%;
+    --primary-foreground: 30 20% 99%;
+
+    /* grafite: superfície escura do cabeçalho e do rodapé */
+    --brand: 24 10% 14%;
+    --brand-foreground: 30 20% 97%;
+
+    --secondary: 30 12% 95%;
+    --secondary-foreground: 24 10% 12%;
+    --muted: 30 12% 95%;
+    --muted-foreground: 25 6% 45%;
+    --accent: 21 90% 96%;
+    --accent-foreground: 21 90% 30%;
+
+    --destructive: 0 78% 47%;
+    --destructive-foreground: 30 20% 99%;
+
+    --border: 28 12% 89%;
+    --input: 28 12% 89%;
+    --ring: 21 90% 45%;
+    --radius: 0.75rem;
   }
 
   :root[data-theme='dark'], .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 40% 10%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 213 27% 84%;
+    --background: 24 12% 8%;
+    --foreground: 30 15% 95%;
+    --card: 24 11% 11%;
+    --card-foreground: 30 15% 95%;
+
+    /* no escuro o laranja clareia para manter contraste sobre o grafite */
+    --primary: 24 94% 55%;
+    --primary-foreground: 24 12% 8%;
+
+    --brand: 24 12% 6%;
+    --brand-foreground: 30 15% 95%;
+
+    --secondary: 24 9% 18%;
+    --secondary-foreground: 30 15% 95%;
+    --muted: 24 9% 18%;
+    --muted-foreground: 25 8% 62%;
+    --accent: 24 30% 18%;
+    --accent-foreground: 24 94% 70%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 30 15% 95%;
+
+    --border: 24 9% 20%;
+    --input: 24 9% 20%;
+    --ring: 24 94% 55%;
   }
 
   * { @apply border-border; }

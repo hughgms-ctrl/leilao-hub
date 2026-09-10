@@ -6,12 +6,19 @@ import { brl, pct, titulo, cn } from '@/lib/utils';
 import type { Lote } from '@/types';
 import { ExternalLink, Gauge, MapPin, TriangleAlert, BadgeCheck, Scale, CalendarClock } from 'lucide-react';
 
-/** verde > 0.4 | amarelo 0.2–0.4 | neutro < 0.2 */
+/**
+ * Faixa do score: verde > 0.4 | neutro 0.2–0.4 | discreto < 0.2
+ *
+ * A faixa do meio era âmbar. Com o laranja virando cor de marca, âmbar
+ * sobre a foto passou a competir com o cabeçalho e com os botões — e o
+ * selo de score deixava de significar "oportunidade" para virar mais um
+ * elemento laranja na tela. Só o verde (oportunidade real) mantém cor.
+ */
 function faixaScore(score: number) {
   if (score > 0.4)
     return 'bg-emerald-50 text-emerald-900 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25';
   if (score >= 0.2)
-    return 'bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25';
+    return 'bg-white/90 text-zinc-800 ring-zinc-300 dark:bg-zinc-800/80 dark:text-zinc-200 dark:ring-zinc-600';
   return 'bg-background/90 text-foreground ring-border';
 }
 
@@ -49,7 +56,7 @@ export function LoteCard({ lote }: { lote: Lote }) {
   return (
     <Card className="group/card flex flex-col overflow-hidden transition-shadow hover:shadow-md">
       <div className="relative">
-        <CarrosselFotos fotos={fotos} alt={nome} className="aspect-[4/3] w-full" />
+        <CarrosselFotos fotos={fotos} alt={nome} className="aspect-[16/11] w-full" />
 
         {/* Km sempre visível: é o dado que mais muda a decisão de compra */}
         <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
@@ -98,8 +105,14 @@ export function LoteCard({ lote }: { lote: Lote }) {
           {prazo && (
             <p
               className={cn(
-                'flex items-center gap-1 text-xs font-medium',
-                prazo.urgente ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+                'inline-flex w-fit items-center gap-1 text-xs font-medium',
+                // Prazo curto vira PÍLULA CHEIA, não texto vermelho: com o
+                // laranja da marca no cabeçalho e nos botões, vermelho e
+                // laranja ficaram vizinhos, e a forma separa melhor que o
+                // matiz.
+                prazo.urgente
+                  ? 'rounded-full bg-red-600 px-2 py-0.5 text-white dark:bg-red-500'
+                  : 'text-muted-foreground',
               )}
               title={`Encerramento: ${prazo.data}`}
             >

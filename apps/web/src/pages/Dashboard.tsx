@@ -84,10 +84,10 @@ export default function Dashboard() {
         )}
 
         {carregando && !erro && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="space-y-3">
-                <Skeleton className="aspect-[4/3] w-full" />
+                <Skeleton className="aspect-[16/11] w-full" />
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
               </div>
@@ -111,7 +111,7 @@ export default function Dashboard() {
 
         {!carregando && !erro && dados && dados.itens.length > 0 && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {dados.itens.map((lote) => <LoteCard key={lote.id} lote={lote} />)}
             </div>
             <Paginacao

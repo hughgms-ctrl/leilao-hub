@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Dashboard from '@/pages/Dashboard';
 import LoteDetalhe from '@/pages/LoteDetalhe';
 import { buscarStats } from '@/api';
+import { Assinatura } from '@/components/Marca';
 
 /**
  * A lista de fontes era escrita à mão no cabeçalho e ficou mentindo:
@@ -30,19 +31,25 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="container flex flex-wrap items-baseline justify-between gap-2 py-6">
-            <div>
-              <Link to="/" className="text-2xl font-semibold tracking-tight hover:underline">
-                Leilão Hub
-              </Link>
-              <p className="text-sm text-muted-foreground">
-                Oportunidades de veículos em leilão, comparadas com a tabela FIPE
-              </p>
-            </div>
-            <Fontes />
+        {/* Cabeçalho em grafite: dá âncora visual à marca e separa o
+            "quem somos" do conteúdo, que fica todo em superfície clara. */}
+        <header className="bg-brand text-brand-foreground">
+          <div className="container flex flex-wrap items-center justify-between gap-3 py-4">
+            <Link to="/" className="transition-opacity hover:opacity-90">
+              <Assinatura />
+            </Link>
+            <p className="text-sm text-brand-foreground/70">
+              Veículos em leilão, comparados com a tabela FIPE
+            </p>
           </div>
         </header>
+
+        {/* Faixa de fontes: informação de procedência, não de navegação */}
+        <div className="border-b bg-muted/40">
+          <div className="container py-2">
+            <Fontes />
+          </div>
+        </div>
 
         <Routes>
           <Route path="/" element={<Dashboard />} />
