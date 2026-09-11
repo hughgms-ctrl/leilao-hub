@@ -67,6 +67,13 @@ export const limitePorIp: RequestHandler = (req, res, next) => {
  * 5 min de cache é invisível para quem usa e corta a maior parte da carga.
  * stale-while-revalidate deixa a CDN servir o valor velho enquanto busca
  * o novo, para ninguém pegar latência de banco.
+ *
+ * CUIDADO: a CDN da Vercel guarda UMA variante por URL e ignora `Vary`.
+ * Toda resposta daqui tem que ser idêntica para qualquer chamador —
+ * nada que dependa de header da requisição (Origin, Accept-Language,
+ * autenticação). Foi por isso que o CORS com allowlist derrubou o site:
+ * a primeira resposta cacheada saiu sem Access-Control-Allow-Origin e
+ * virou a resposta de todo mundo. Ver o comentário em index.ts.
  */
 export const cacheDeBorda: RequestHandler = (_req, res, next) => {
   res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');

@@ -10,42 +10,46 @@ const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
 
 /**
- * Origens liberadas. Local: 5173 do Vite. Em producao a URL do front na
- * Vercel muda por projeto/preview, entao vem de CORS_ORIGINS (lista
- * separada por virgula). Previews da Vercel (*.vercel.app) sao aceitos
- * por padrao para nao ter que recadastrar a cada deploy.
+ * CORS aberto — e tem que ser, por causa do cache de borda.
+ *
+ * Antes havia uma allowlist de origens (localhost:5173 + *.vercel.app).
+ * Com allowlist a resposta muda conforme o header `Origin`, e a única
+ * forma de a CDN não misturar as variantes é `Vary: Origin`. O Express
+ * mandava o Vary certinho, mas a CDN da Vercel NÃO usa Vary como chave de
+ * cache: ela guarda uma variante só. Bastou uma requisição sem `Origin`
+ * (crawler, health check, curl) chegar primeiro para a CDN guardar a
+ * resposta sem `Access-Control-Allow-Origin` — e passar a servir essa
+ * cópia para o browser de todo mundo. Resultado: o site inteiro caiu com
+ * "Failed to fetch" por CORS, com a API respondendo 200.
+ *
+ * `*` gera uma resposta idêntica para qualquer origem, então a cópia da
+ * CDN vale para todos. Não perdemos proteção: são só rotas GET de catálogo
+ * público, sem cookie e sem credencial — quem quisesse os dados já pegava
+ * com um curl, que CORS nunca impediu. CORS defende sessão de usuário, e
+ * aqui não existe sessão.
+ *
+ * Se um dia entrar rota autenticada, ela NÃO pode ficar sob esta política
+ * nem sob o cache de borda.
  */
-const ORIGENS_LOCAIS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-const ORIGENS_ENV = (process.env.CORS_ORIGINS ?? '')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-app.use(
-  cors({
-    origin(origin, cb) {
-      // requisicoes sem Origin (curl, health check) passam
-      if (!origin) return cb(null, true);
-      const liberado =
-        ORIGENS_LOCAIS.includes(origin) ||
-        ORIGENS_ENV.includes(origin) ||
-        /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
-      // origem não liberada: responde SEM o header e deixa o browser
-      // bloquear. Lançar Error aqui viraria 500 no lugar de um CORS limpo.
-      cb(null, liberado);
-    },
-  }),
-);
+app.use(cors({ origin: '*', methods: ['GET'] }));
 app.use(express.json());
 app.use(limitePorIp);
 app.use(cacheDeBorda);
 
-/** erro de validação vira 400 com detalhe; o resto vira 500 */
+/**
+ * Erro de validação vira 400 com detalhe; o resto vira 500.
+ *
+ * `cacheDeBorda` já carimbou `s-maxage=300` na resposta antes de a rota
+ * rodar, então sem o `no-store` aqui uma falha momentânea do banco ficaria
+ * grudada na CDN por 5 minutos (mais 10 de stale-while-revalidate) depois
+ * de o banco já ter voltado. Erro não se cacheia.
+ */
 function comErro(fn: express.RequestHandler): express.RequestHandler {
   return async (req, res, next) => {
     try {
       await fn(req, res, next);
     } catch (e) {
+      res.setHeader('Cache-Control', 'no-store');
       if (e instanceof z.ZodError) {
         res.status(400).json({ erro: 'parametros invalidos', detalhes: e.issues });
         return;
@@ -89,6 +93,9 @@ app.get('/api/lotes/:id', comErro(async (req, res) => {
   const id = idSchema.parse(req.params.id);
   const lote = await buscarLote(id);
   if (!lote) {
+    // idem: lote some e volta entre ciclos do worker; 404 na CDN por 5min
+    // deixaria um lote válido inacessível depois de ele já ter voltado
+    res.setHeader('Cache-Control', 'no-store');
     res.status(404).json({ erro: 'lote nao encontrado' });
     return;
   }
