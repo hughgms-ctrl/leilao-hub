@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StatsCards } from '@/components/StatsCards';
-import { Filtros } from '@/components/Filtros';
+import { Filtros, FILTROS_LIMPOS } from '@/components/Filtros';
 import { LoteCard } from '@/components/LoteCard';
 import { Paginacao } from '@/components/Paginacao';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,7 +11,7 @@ import type { ListaResposta, Stats } from '@/types';
 import { SearchX, TriangleAlert } from 'lucide-react';
 
 export default function Dashboard() {
-  const { filtros, setFiltros, setFiltro } = useFiltrosUrl({ score_tipo: 'confirmado' });
+  const { filtros, setFiltros, setFiltro } = useFiltrosUrl(FILTROS_LIMPOS);
   const [busca, setBusca] = useState(filtros.busca ?? '');
   const buscaDebounced = useDebounce(busca);
 
@@ -103,7 +103,7 @@ export default function Dashboard() {
               Tente ampliar a faixa de preço, trocar a condição, ou incluir os scores
               especulativos.
             </p>
-            <Button className="mt-4" variant="outline" onClick={() => { setBusca(''); setFiltros({}); }}>
+            <Button className="mt-4" variant="outline" onClick={() => { setBusca(''); setFiltros(FILTROS_LIMPOS); }}>
               Limpar filtros
             </Button>
           </div>
